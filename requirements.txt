@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn==0.30.6
+pytest==8.3.3
+
+# Speech-to-text (ASR) deps.
+# Models are Whisper Small based (NCAIR1/Hausa-ASR, NCAIR1/Igbo-ASR) loaded via
+# Hugging Face transformers pipeline, following the exact usage pattern in
+# each model card's "Basic Usage" section (librosa.load @ 16kHz + pipeline()).
+transformers==4.45.1
+librosa==0.10.2.post1
+soundfile==0.12.1
+
+# PyTorch CPU-only wheel keeps install small; remove `--extra-index-url` line
+# and use `pip install torch` directly if you want GPU/CUDA support.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+torchaudio==2.4.1

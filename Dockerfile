@@ -25,11 +25,11 @@ RUN apt-get update -qq \
 
 WORKDIR /app
 
-COPY requirements.txt ./requirements.txt
+COPY requirements-full.txt ./requirements-full.txt
 
-# Install PyTorch CPU wheel first (index URL in requirements.txt), then the rest.
+# Install PyTorch CPU wheel first (index URL in requirements-full.txt), then the rest.
 RUN pip install --upgrade pip setuptools wheel \
- && pip install -r requirements.txt
+ && pip install -r requirements-full.txt
 
 # Copy the FastAPI app (keep runtime slim).
 COPY app/ ./app/

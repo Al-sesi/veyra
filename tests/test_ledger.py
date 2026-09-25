@@ -244,3 +244,144 @@ def test_api_voice_note_rejects_missing_language(client, sample_audio: Path):
             files={"file": ("note1.ogg", fh, "audio/ogg")},
         )
     assert resp.status_code == 422  # FastAPI missing-field validation
+
+
+# ---------------------------------------------------------------------------
+# Persistent Excel ledger link + privacy (cross-phone isolation)
+# ---------------------------------------------------------------------------
+
+def _seed_phone_user_entries(client, sample_audio: Path, phone_label: str,
+                             user_id: int, transcript: str):
+    """Seed entries for a user id, then update the user's phone_or_name so
+    we have a real phone-keyed account to test privacy against."""
+    with patch("app.pipeline.transcribe", return_value=transcript):
+        with sample_audio.open("rb") as fh:
+            client.post(
+                "/voice-note",
+                data={"language": "en", "user_id": str(user_id)},
+                files={"file": ("note1.ogg", fh, "audio/ogg")},
+            )
+    # Directly stamp the phone_or_name on the user row.
+    from app.db import get_connection, query_one
+    import app.db as db_mod
+    with get_connection(db_mod.DEFAULT_DB_PATH) as conn:
+        conn.execute(
+            "UPDATE users SET phone_or_name = ? WHERE id = ?;",
+            (phone_label, user_id),
+        )
+    return query_one(db_mod.DEFAULT_DB_PATH,
+                     "SELECT * FROM users WHERE id = ?;", (user_id,))
+
+
+def _run_pipeline_with(sample_audio: Path, transcript: str,
+                       user_id, tmp_db: Path, _patch_db, language: str = "en"):
+    """Helper mimicking the `say` fixture (which lives in test_corrections_debts)."""
+    from unittest.mock import patch
+    from app.pipeline import process_voice_note
+    with patch("app.pipeline.transcribe", return_value=transcript):
+        return process_voice_note(
+            str(sample_audio), language=language, user_id=user_id,
+            db_path=tmp_db,
+        )
+
+
+def test_pipeline_request_history_returns_link_in_reply(
+    sample_audio: Path, tmp_db: Path, _patch_db, _mock_asr
+):
+    """When a trader asks for their history, reply_text must embed the
+    /ledger/{phone}.xlsx URL path so they can bookmark it."""
+    # First seed a sale so the user exists in the DB.
+    _run_pipeline_with(sample_audio, "I sold rice 45k", 401, tmp_db, _patch_db)
+    # Then stamp the phone on their row.
+    from app.db import get_connection
+    with get_connection(tmp_db) as conn:
+        conn.execute(
+            "UPDATE users SET phone_or_name = ? WHERE id = ?;",
+            ("234801234AAAA", 401),
+        )
+    result = _run_pipeline_with(sample_audio, "show my history", 401,
+                                tmp_db, _patch_db)
+    assert result["reply_text"].startswith("Here is your permanent ledger link.")
+    assert "/ledger/234801234AAAA.xlsx" in result["reply_text"]
+    assert "Bookmark it" in result["reply_text"]
+
+
+def test_pipeline_request_history_with_no_user_id_fails_safely(
+    sample_audio: Path, tmp_db: Path, _patch_db, _mock_asr,
+):
+    """No user_id -> no link leaked; ask for the id explicitly."""
+    result = _run_pipeline_with(sample_audio, "my report", None,
+                                tmp_db, _patch_db)
+    assert "Link:" not in result["reply_text"]
+    assert "whose book" in result["reply_text"]
+    # Nothing persisted for a missing-user history request.
+    from app.db import query_rows
+    assert query_rows(tmp_db, "SELECT * FROM users;") == []
+
+
+def test_xlsx_endpoint_privacy_phones_do_not_leak(client, sample_audio: Path,
+                                                  tmp_db: Path):
+    """Phone A's xlsx NEVER contains phone B's entries.
+
+    Steps:
+      1. Seed distinct entries for user 501 (phone A) and user 502 (phone B).
+      2. Hit /ledger/{phone_A}.xlsx.
+      3. Open the workbook with openpyxl and assert that only A's items
+         appear — B's item is a string that cannot appear anywhere in the
+         sheet (as a case-insensitive substring check on every cell value).
+    """
+    # Two sales with unique, easy-to-search item names.
+    phone_a = "2348099990001"
+    phone_b = "2348099990002"
+    # Transcripts whose parsed item names are recognisable.
+    transcript_a = "I sold garriijombo for 10000 naira"
+    transcript_b = "I bought kununzzaki stock 8000 naira"
+    _seed_phone_user_entries(client, sample_audio, phone_a, 501, transcript_a)
+    _seed_phone_user_entries(client, sample_audio, phone_b, 502, transcript_b)
+
+    # Now fetch phone A's Excel file.
+    resp_a = client.get(f"/ledger/{phone_a}.xlsx")
+    assert resp_a.status_code == 200, resp_a.text
+    assert resp_a.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    # Open the bytes as a workbook, then look for cell values.
+    from io import BytesIO
+    from openpyxl import load_workbook
+    wb_a = load_workbook(filename=BytesIO(resp_a.content))
+    ws_a = wb_a.active
+    all_cell_strs_a = " ".join(
+        str(cell.value).lower() for row in ws_a.iter_rows()
+        for cell in row if cell.value is not None
+    )
+    # garriijombo (A) is present; kununzzaki (B) is ABSENT.
+    assert "garriijombo" in all_cell_strs_a, (
+        "Phone A's workbook should include their own sale item."
+    )
+    assert "kununzzaki" not in all_cell_strs_a, (
+        "Phone B's entry (kununzzaki) MUST NOT leak into phone A's xlsx."
+    )
+
+    # Sanity check the other direction: B's sheet has kununzzaki, no garriijombo.
+    resp_b = client.get(f"/ledger/{phone_b}.xlsx")
+    assert resp_b.status_code == 200
+    wb_b = load_workbook(filename=BytesIO(resp_b.content))
+    ws_b = wb_b.active
+    all_cell_strs_b = " ".join(
+        str(cell.value).lower() for row in ws_b.iter_rows()
+        for cell in row if cell.value is not None
+    )
+    assert "kununzzaki" in all_cell_strs_b
+    assert "garriijombo" not in all_cell_strs_b, (
+        "Phone A's entry (garriijombo) MUST NOT leak into phone B's xlsx."
+    )
+
+
+def test_xlsx_endpoint_unknown_phone_returns_404(client, sample_audio: Path):
+    """Unknown phone numbers get a 404 so traders can't enumerate accounts
+    by hitting random /ledger/*.xlsx paths."""
+    resp = client.get("/ledger/2340000000000.xlsx")
+    assert resp.status_code == 404, resp.text
+    assert "No ledger" in resp.json()["detail"]
+

@@ -7,7 +7,17 @@
  * persists per browser.
  */
 
-const API_BASE = "http://127.0.0.1:8000";
+const LOCAL_FALLBACK = "http://127.0.0.1:8000";
+const qs = new URLSearchParams(window.location.search);
+const API_BASE = (function () {
+  if (qs.has("api")) return qs.get("api").replace(/\/+$/, "");
+  if (window.location.protocol === "file:") return LOCAL_FALLBACK;
+  const probe = window.location.origin;
+  if (/127\.0\.0\.1|localhost/.test(probe) && window.location.port) {
+    return probe;
+  }
+  return LOCAL_FALLBACK;
+})();
 const UID_KEY = "veyra_demo_uid";
 
 const LANG_NAMES = { yo: "Yorùbá", ha: "Hausa", ig: "Igbo", en: "English", pcm: "Pidgin" };

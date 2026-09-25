@@ -1,6 +1,7 @@
 fastapi==0.115.0
 uvicorn==0.30.6
 pytest==8.3.3
+openpyxl==3.1.5
 
 # Speech-to-text (ASR) deps.
 # Models are Whisper Small based (NCAIR1/Hausa-ASR, NCAIR1/Igbo-ASR) loaded via

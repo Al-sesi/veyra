@@ -205,7 +205,12 @@ def test_debt_paid_does_not_touch_other_peoples_debts(say):
 
 def test_unclear_note_saves_nothing(say, tmp_db: Path):
     result = say("blah blah nothing here", user_id=13)
-    assert "say it again" in result["reply_text"]
+    # Per the explicit menu spec: unclear input triggers the help menu so the
+    # trader can see what to say next, instead of only saying "say it again".
+    assert result["reply_text"].startswith("I didn't quite catch that.")
+    assert "Here is what I can help with" in result["reply_text"]
+    bullets = [ln for ln in result["reply_text"].splitlines() if ln.strip().startswith("•")]
+    assert len(bullets) == 5
     assert result["entries"] == []
     assert result["summary"]["total_sales"] == 0
     # Nothing was written at all: no entries and not even a user row.
@@ -268,3 +273,148 @@ def test_api_correction_flow(client, sample_audio: Path):
     entries = client.get("/ledger/22").json()["entries"]
     assert len(entries) == 2
     assert sorted(e["status"] for e in entries) == ["active", "voided"]
+
+
+# ---------------------------------------------------------------------------
+# Menu intent: triggered by keyword "menu" and also on unclear input
+# ---------------------------------------------------------------------------
+
+def test_menu_intent_reply_lists_five_things(say, tmp_db: Path):
+    """Explicit "menu" fires the menu reply with exactly 5 bullet items
+    matching the spec."""
+    result = say("menu", user_id=30)
+    assert "Here is what I can help with" in result["reply_text"]
+    # Exactly 5 items required by the spec
+    bullets = [ln for ln in result["reply_text"].splitlines() if ln.strip().startswith("•")]
+    assert len(bullets) == 5, f"Expected 5 bullets, got: {result['reply_text']}"
+    # Content matches the spec line-by-line (case-insensitive, order matters)
+    lower = result["reply_text"].lower()
+    assert "log a sale or expense" in lower or "speak naturally to log a sale" in lower
+    assert "my ledger" in lower and "excel" in lower
+    assert "who owes me" in lower and "who i owe" in lower
+    assert "undo" in lower and "remove your last entry" in lower
+    assert '"help"' in lower or "'help'" in lower
+    # Menu doesn't log anything: summary stays zero, entries=[], nothing saved.
+    assert result["entries"] == []
+    assert result["summary"]["total_sales"] == 0
+    from app.db import query_rows
+    assert query_rows(tmp_db, "SELECT * FROM entries;") == []
+
+
+def test_menu_is_also_sent_on_unrecognized_input(say, tmp_db: Path):
+    """When the parser returns nothing, reply_text starts with "I didn't
+    quite catch that" AND continues with the full 5-item menu."""
+    result = say("blah blah gibberish nothing here", user_id=31)
+    assert result["reply_text"].startswith("I didn't quite catch that.")
+    # The full menu text is appended.
+    assert "Here is what I can help with" in result["reply_text"]
+    bullets = [ln for ln in result["reply_text"].splitlines() if ln.strip().startswith("•")]
+    assert len(bullets) == 5
+    # Still nothing persisted, per the rule-based unclear-note contract.
+    from app.db import query_rows
+    assert query_rows(tmp_db, "SELECT * FROM entries;") == []
+    assert query_rows(tmp_db, "SELECT * FROM users;") == []
+
+
+# ---------------------------------------------------------------------------
+# Help / FAQ intent
+# ---------------------------------------------------------------------------
+
+def test_help_intent_faq_covers_all_four_topics(say, tmp_db: Path):
+    """Help reply must cover: what Veyra is, languages, pilot status, no
+    human support. Must NOT falsely promise a human."""
+    result = say("help me", user_id=32)
+    lower = result["reply_text"].lower()
+    # 1. What Veyra is / does
+    assert "voice-note bookkeeper" in lower or "bookkeeper" in lower
+    # 2. Languages (EN/Pidgin/Yo/Ha/Ig at minimum)
+    assert "english" in lower or "nigerian english" in lower
+    assert "pidgin" in lower
+    assert "yoruba" in lower or "yorùbá" in lower
+    assert "hausa" in lower
+    assert "igbo" in lower
+    # 3. Pilot project disclosure
+    assert "pilot" in lower
+    # 4. No human support — EXPLICITLY stated, never implied
+    assert "no human" in lower or "no customer care" in lower or "no person" in lower
+    assert "automated" in lower
+    # Must NOT promise human interaction
+    for bad_phrase in [
+        "a human will",
+        "we will call you",
+        "customer support agent",
+        "real person",
+    ]:
+        assert bad_phrase not in lower, f"Misleading phrase found: {bad_phrase}"
+    # Help is also read-only: nothing written.
+    assert result["entries"] == []
+    from app.db import query_rows
+    assert query_rows(tmp_db, "SELECT * FROM entries;") == []
+
+
+def test_help_on_what_is_veyra_also_returns_faq(say):
+    """FAQ trigger phrases all resolve to the same help reply."""
+    for text in ["what is Veyra", "who are you", "is this a pilot"]:
+        result = say(text, user_id=33)
+        assert "Here is what you need to know about Veyra" in result["reply_text"]
+
+
+# ---------------------------------------------------------------------------
+# Non-interference: menu/help must not break existing intents
+# ---------------------------------------------------------------------------
+
+def test_menu_keyword_does_not_break_normal_sale(say, tmp_db: Path):
+    """A real sale mentioning a menu-board (food truck "menu") is NOT a
+    menu intent, because "menu" as a substring of another word/context
+    only matches when the trigger matches whole-word boundaries. But in
+    this test we assert: a pure sale without "menu" at all still works
+    identically after the menu-code changes."""
+    before = say("I sold 5 bags of rice for 45k", user_id=40)
+    after = say("paid transport 3k expense", user_id=40)
+    assert before["entries"][0]["amount"] == 45000
+    assert before["entries"][0]["type"] == "sale"
+    assert after["entries"][0]["type"] == "expense"
+    # Combined totals: sale 45k, expense 3k
+    final = say("what can you do", user_id=40)  # this IS a menu call
+    # But even after asking menu, previously stored totals remain.
+    from app.ledger import get_summary
+    with patch("app.ledger.DEFAULT_DB_PATH", tmp_db):
+        summary = get_summary(user_id=40)
+    assert summary["total_sales"] == 45000
+    assert summary["total_expenses"] == 3000
+    # Menu itself didn't add entries.
+    assert final["entries"] == []
+
+
+def test_help_trigger_does_not_interfere_with_debts(say, tmp_db: Path):
+    """A debt trigger + a help trigger in the SAME message is disambiguated
+    by classify_message order (help wins over debt), but normal debt
+    messages with no help trigger still parse identically."""
+    # Pure debt still works
+    r1 = say("Bisi owes me 10k", user_id=41)
+    assert r1["reply_text"] == "Noted: Bisi owes you 10,000 naira."
+    from app.ledger import list_open_debts
+    with patch("app.ledger.DEFAULT_DB_PATH", tmp_db):
+        assert [d["person"] for d in list_open_debts(41)] == ["Bisi"]
+    # Pure correction still works
+    say("sorry, make it 8k", user_id=41)
+    # Pure delete still works
+    say("cancel that", user_id=41)
+    # Pure sale still works
+    sale = say("I sold akara 500", user_id=41)
+    assert sale["entries"][0]["item"] == "Akara"
+    assert sale["entries"][0]["amount"] == 500
+    # Pure debt-paid still works
+    say("Mama Ngozi owes me 7k", user_id=41)
+    settled = say("Mama Ngozi don pay", user_id=41)
+    assert "marked as paid" in settled["reply_text"]
+
+
+def test_known_intent_without_menu_still_produces_zero_summary_not_menu(say):
+    """A successful normal transaction must NOT embed the menu reply. The
+    menu only appears on explicit request OR on unclear input."""
+    result = say("I sold rice 10k", user_id=42)
+    assert "Recorded:" in result["reply_text"] or "rice" in result["reply_text"]
+    # Menu lines must be absent from a successful entry reply.
+    assert "Here is what I can help with" not in result["reply_text"]
+    assert "who owes me" not in result["reply_text"]

@@ -10,6 +10,12 @@ Rule-based intent classification for trader voice notes.
   - "debt_owed_to_me" someone owes the trader ("Mama Ngozi owes me 5k")
   - "debt_i_owe"      the trader owes someone ("I owe Bisi 10k")
   - "debt_paid"       a registered debt was settled ("Mama Ngozi don pay")
+  - "request_history" trader asks for their persistent Excel ledger link
+                      ("show my history", "send my records", "my report")
+  - "menu"            asks for the help menu or Veyra didn't understand
+                      (triggers reply listing the 5 things she can do)
+  - "help"            asks for FAQ-style info: what Veyra is, languages,
+                      pilot status, no human support available yet
 
 No AI model is involved: everything is keyword/phrase matching (the parser
 must stay rule-based). The trigger lists below are grouped by language so
@@ -36,6 +42,9 @@ INTENTS: Tuple[str, ...] = (
     "debt_owed_to_me",
     "debt_i_owe",
     "debt_paid",
+    "request_history",
+    "menu",
+    "help",
 )
 
 ENTRY_INTENT = "entry"
@@ -44,6 +53,9 @@ DELETE_LAST_INTENT = "delete_last"
 DEBT_OWED_TO_ME_INTENT = "debt_owed_to_me"
 DEBT_I_OWE_INTENT = "debt_i_owe"
 DEBT_PAID_INTENT = "debt_paid"
+REQUEST_HISTORY_INTENT = "request_history"
+MENU_INTENT = "menu"
+HELP_INTENT = "help"
 
 DEBT_INTENTS: Tuple[str, ...] = (
     DEBT_OWED_TO_ME_INTENT,
@@ -122,6 +134,58 @@ CORRECTION_TRIGGERS = [
     # Yoruba ("kìí ṣe" = it is not, "bẹ́ẹ̀ kọ́" = not so, "àtúnṣe" = correction)
     "atunse", "mo tun se", "kii se", "kii se bee", "bee ko",
     # TODO: Hausa / Igbo triggers go here
+]
+
+REQUEST_HISTORY_TRIGGERS = [
+    # English
+    "show my history", "show me my history", "my history",
+    "send my records", "send me my records", "my records", "my record",
+    "my report", "send me my report", "show me my report", "my statement",
+    "show me my statement", "ledger report", "my ledger", "show my ledger",
+    "show me my ledger", "export my ledger", "download my ledger",
+    "give me my report", "give me my records", "give me my history",
+    "can i have my report", "can i see my records", "can i see my history",
+    # Nigerian Pidgin
+    "show my history", "send my report", "send my records",
+    "give me my report", "give me my records", "my report",
+    "my records", "show me my book", "my book", "give me my book",
+    "abeg send my report", "abeg give me my records", "i need my report",
+    "i need my records",
+    # TODO: Yoruba triggers (e.g. "fihan iwe mi", "ranse iwe-akoso mi")
+    # TODO: Hausa triggers (e.g. "nuna littafin tarihi na", "aiko rahoto na")
+    # TODO: Igbo triggers (e.g. "gosi akwụkwọ m", "zipụta akwụkwọ ndebi m")
+]
+
+MENU_TRIGGERS = [
+    # English — single keyword "menu" works any case, anywhere in the text.
+    # Explicit menu request phrases:
+    "menu", "show menu", "see menu", "what can you do",
+    "what do you do", "list commands", "options", "show options",
+    "main menu", "start menu", "tell me what to do", "instructions",
+    # Nigerian Pidgin
+    "menu", "wetin you fit do", "wetin you sabi do",
+    "show me the menu", "abeg show menu", "list wetin you dey do",
+    # TODO: Yoruba triggers (e.g. "akojọ ọjà kan", "kọ ohun ti o le ṣe")
+    # TODO: Hausa triggers (e.g. "menu", "lissafi abin da zaka iya yi")
+    # TODO: Igbo triggers (e.g. "menu", "depụta ihe ị nwere ike ime")
+]
+
+HELP_TRIGGERS = [
+    # English — FAQ / customer-care-style questions
+    "help", "help me", "what is veyra", "who are you", "what are you",
+    "support", "customer care", "customer support", "talk to a human",
+    "speak to a person", "human support", "contact support",
+    "which languages", "what languages", "languages you support",
+    "is this a pilot", "pilot info", "about veyra", "tell me about veyra",
+    "how does veyra work", "need help", "i need help",
+    # Nigerian Pidgin
+    "help", "help me", "abeg help", "i need help",
+    "who be veyra", "wetin be veyra", "wetin you be",
+    "na pilot", "wetin languages you sabi", "customer care",
+    "abeg send person help me",
+    # TODO: Yoruba triggers (e.g. "e ran mi lọwọ", "kini Veyra")
+    # TODO: Hausa triggers (e.g. "taya ni", "menene Veyra")
+    # TODO: Igbo triggers (e.g. "nyere m aka", "kedu ihe Veyra bụ")
 ]
 
 # "no, it was 4k not 40k" — a bare sentence-initial "no" is a correction
@@ -225,11 +289,27 @@ def _first_person_before(text: str, position: int) -> bool:
 def classify_message(text: str) -> str:
     """Rule-based classifier; returns exactly one of `INTENTS`.
 
-    Order matters: debt statements are checked before payment statements
-    ("Musa never pay me 3k" is a debt, not a payment), deletes before
-    corrections, and anything unrecognised falls through to "entry".
+    Order matters:
+      - `request_history` first so "show my history" is never mistaken for
+        a debt/expense.
+      - `help` next so FAQ phrases like "what is Veyra" are answered with
+        the FAQ reply instead of falling into the generic menu.
+      - `menu` next so "what can you do" / "menu" are recognised before
+        any debt/delete/correction matching.
+      - Debt statements before payment statements
+        ("Musa never pay me 3k" is a debt, not a payment).
+      - Deletes before corrections.
+      - Anything unrecognised falls through to "entry" (the pipeline later
+        decides whether the parser actually extracted a transaction; if not
+        the menu is shown as a fallback).
     """
     text = text or ""
+    if find_trigger(text, REQUEST_HISTORY_TRIGGERS):
+        return REQUEST_HISTORY_INTENT
+    if find_trigger(text, HELP_TRIGGERS):
+        return HELP_INTENT
+    if find_trigger(text, MENU_TRIGGERS):
+        return MENU_INTENT
     if find_trigger(text, DEBT_OWED_TO_ME_TRIGGERS):
         return DEBT_OWED_TO_ME_INTENT
     if find_trigger(text, DEBT_I_OWE_TRIGGERS):

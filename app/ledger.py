@@ -28,7 +28,10 @@ from __future__ import annotations
 import sqlite3
 from typing import Any, Iterable, Optional
 
-from app.db import DEFAULT_DB_PATH, get_connection, get_or_create_user, row_to_dict
+from io import BytesIO
+from urllib.parse import quote
+
+from app.db import DEFAULT_DB_PATH, get_connection, get_or_create_user, query_one, row_to_dict
 
 
 DEBT_DIRECTIONS = ("owed_to_me", "i_owe")
@@ -402,3 +405,138 @@ def get_summary(
             "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
             "total_i_owe": int(debt_totals["total_i_owe"]),
         }
+
+
+# ---------------------------------------------------------------------------
+# Persistent ledger link (Excel export via phone number)
+# ---------------------------------------------------------------------------
+
+def get_user_by_id(
+    user_id: int,
+    *,
+    db_path=None,
+) -> Optional[dict[str, Any]]:
+    """Return the full user row (including phone_or_name) for a user_id, or None."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    return query_one(
+        db_path,
+        "SELECT * FROM users WHERE id = ? LIMIT 1;",
+        (int(user_id),),
+    )
+
+
+def list_active_entries_chronological(
+    user_id: int,
+    *,
+    db_path=None,
+) -> list[dict[str, Any]]:
+    """Active entries only, oldest first (needed for running-balance xlsx)."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM entries
+            WHERE user_id = ? AND status = 'active'
+            ORDER BY datetime(created_at) ASC, id ASC;
+            """,
+            (uid,),
+        ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def generate_xlsx_ledger_bytes(
+    user_id: int,
+    *,
+    db_path=None,
+    phone_label: Optional[str] = None,
+) -> bytes:
+    """Build a fresh in-memory .xlsx workbook for ``user_id``.
+
+    Columns (one row per active entry, chronological order with a running
+    running balance where sales add and expenses subtract):
+      - Date        (created_at, formatted)
+      - Item        (the item name, e.g. "Rice")
+      - Amount      (integer naira, sale is positive, expense is negative)
+      - Type        (Sale / Expense)
+      - Balance     (running balance after this row)
+
+    The workbook is NEVER cached on disk: callers stream it out fresh on
+    every request so the file is always up to date.
+    """
+    # openpyxl is a declared dep; import here so `import app.ledger` stays
+    # cheap and unit tests that don't touch Excel still run without it.
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    entries = list_active_entries_chronological(user_id, db_path=db_path)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ledger"
+
+    # ---- Header row ----
+    headers = ["Date", "Item", "Amount (₦)", "Type", "Balance (₦)"]
+    ws.append(headers)
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="0C3B2E")
+    center = Alignment(horizontal="center")
+    for col_idx, _ in enumerate(headers, 1):
+        c = ws.cell(row=1, column=col_idx)
+        c.font = header_font
+        c.fill = header_fill
+        c.alignment = center
+
+    # ---- Data rows ----
+    running = 0
+    gold_fill = PatternFill("solid", fgColor="F7D27A")
+    for entry in entries:
+        amount_int = int(entry["amount"])
+        signed = amount_int if entry["type"] == "sale" else -amount_int
+        running += signed
+        # Format: date (drop the seconds for readability; keep original precision)
+        raw_date = entry.get("created_at") or ""
+        ws.append([
+            raw_date,
+            entry.get("item", ""),
+            signed,
+            "Sale" if entry["type"] == "sale" else "Expense",
+            running,
+        ])
+
+    # ---- Summary footer (blank separator + totals) ----
+    summary_start = ws.max_row + 2
+    ws.cell(row=summary_start, column=1, value="Summary").font = Font(bold=True)
+    sales_total = sum(
+        int(e["amount"]) for e in entries if e["type"] == "sale"
+    )
+    expense_total = sum(
+        int(e["amount"]) for e in entries if e["type"] == "expense"
+    )
+    ws.cell(row=summary_start + 1, column=1, value="Total Sales")
+    ws.cell(row=summary_start + 1, column=3, value=sales_total).font = Font(bold=True, color="17705A")
+    ws.cell(row=summary_start + 2, column=1, value="Total Expenses")
+    ws.cell(row=summary_start + 2, column=3, value=expense_total).font = Font(bold=True, color="B03A2E")
+    ws.cell(row=summary_start + 3, column=1, value="Net Profit / (Loss)")
+    ws.cell(row=summary_start + 3, column=3, value=sales_total - expense_total).font = Font(bold=True)
+    ws.cell(row=summary_start + 3, column=3).fill = gold_fill
+
+    # ---- Column widths ----
+    ws.column_dimensions["A"].width = 22
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 16
+    ws.column_dimensions["D"].width = 12
+    ws.column_dimensions["E"].width = 18
+
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def build_ledger_path(phone_or_name: str) -> str:
+    """Return the URL path ``/ledger/{phone}.xlsx`` (URL-encoded safe)."""
+    cleaned = (phone_or_name or "").strip()
+    return f"/ledger/{quote(cleaned, safe='')}.xlsx"
+

@@ -23,12 +23,14 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from io import BytesIO
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.db import DEFAULT_DB_PATH, init_db
-from app.ledger import get_summary, list_entries, list_open_debts
+from app.db import DEFAULT_DB_PATH, init_db, lookup_user_by_phone
+from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summary, list_entries, list_open_debts
 from app.pipeline import process_voice_note
 
 
@@ -44,7 +46,16 @@ app.add_middleware(
     allow_origins=[
         "http://127.0.0.1:8123",
         "http://localhost:8123",
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
     ],
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -111,6 +122,7 @@ async def voice_note(
                 "entries": result["entries"],
                 "summary": result["summary"],
                 "reply_text": result["reply_text"],
+                "language_notice": result.get("language_notice"),
             }
         )
     except FileNotFoundError as exc:
@@ -121,6 +133,36 @@ async def voice_note(
     finally:
         if tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
+
+
+@app.get("/ledger/{phone_number}.xlsx")
+def ledger_xlsx(phone_number: str):
+    """Persistent ledger link: regenerate a fresh .xlsx every call.
+
+    Privacy: only the entries for the exact matched phone number are ever
+    returned; unknown numbers get a 404 so links can't be enumerated to
+    discover which traders have accounts.
+    """
+    user = lookup_user_by_phone(DEFAULT_DB_PATH, phone_number)
+    if user is None:
+        raise HTTPException(status_code=404, detail="No ledger for this phone number")
+    payload = generate_xlsx_ledger_bytes(
+        int(user["id"]),
+        db_path=DEFAULT_DB_PATH,
+        phone_label=user["phone_or_name"],
+    )
+    filename = f"{user['phone_or_name']}.xlsx"
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
 
 
 @app.get("/ledger/{user_id}")

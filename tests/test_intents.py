@@ -41,6 +41,40 @@ from app.intents import INTENTS, classify_message, extract_amount, extract_perso
         ("Musa paid me 3k", "debt_paid"),
         # "I don pay ..." is the trader paying an expense, not someone paying back
         ("I don pay transport 2k", "entry"),
+        # request_history — English
+        ("show my history", "request_history"),
+        ("Show me my history please", "request_history"),
+        ("send my records", "request_history"),
+        ("my report", "request_history"),
+        ("can i see my records", "request_history"),
+        ("download my ledger", "request_history"),
+        # request_history — Nigerian Pidgin
+        ("abeg send my report", "request_history"),
+        ("i need my records", "request_history"),
+        ("show me my book", "request_history"),
+        # menu — case-insensitive single keyword + full phrases
+        ("menu", "menu"),
+        ("MENU", "menu"),
+        ("please show the menu", "menu"),
+        ("what can you do for me", "menu"),
+        ("list commands", "menu"),
+        # menu — Pidgin
+        ("wetin you fit do", "menu"),
+        ("abeg show menu", "menu"),
+        # help — FAQ / customer care
+        ("help", "help"),
+        ("Help me please", "help"),
+        ("what is Veyra?", "help"),
+        ("who are you", "help"),
+        ("customer care", "help"),
+        ("which languages do you understand", "help"),
+        ("is this a pilot project", "help"),
+        ("i need to talk to a human", "help"),
+        # help — Pidgin
+        ("abeg help", "help"),
+        ("wetin be Veyra", "help"),
+        ("who be Veyra", "help"),
+        ("na pilot?", "help"),
     ],
 )
 def test_classify_message(text: str, expected: str) -> None:

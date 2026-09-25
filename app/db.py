@@ -162,6 +162,28 @@ def get_or_create_user(
         return int(cur.lastrowid)
 
 
+def lookup_user_by_phone(
+    db_path: str | Path | None,
+    phone_number: str,
+) -> Optional[dict[str, Any]]:
+    """Find a user row by exact (case-insensitive) phone_or_name match.
+
+    Returns the user dict (with ``id``, ``phone_or_name``, ``language``,
+    ``created_at``) or ``None`` when no match exists.  The persistent
+    ledger link ``/ledger/{phone_number}.xlsx`` uses this to scope the
+    returned Excel file to exactly one trader's own entries.
+    """
+    if not phone_number:
+        return None
+    needle = phone_number.strip()
+    row = query_one(
+        DEFAULT_DB_PATH if db_path is None else db_path,
+        "SELECT * FROM users WHERE LOWER(phone_or_name) = LOWER(?) LIMIT 1;",
+        (needle,),
+    )
+    return row
+
+
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     """Convert a sqlite3.Row into a plain JSON-serializable dict."""
     return {k: row[k] for k in row.keys()}

@@ -66,7 +66,7 @@ def test_add_entries_creates_user_and_rows(tmp_db: Path, _patch_db):
     assert all(r["status"] == "active" for r in saved)
     assert all(r["user_id"] == 1 for r in saved)
     assert [r["amount"] for r in saved] == [45000, 3000]
-    user = query_one(tmp_db, "SELECT * FROM users WHERE id = ?;")
+    user = query_one(tmp_db, "SELECT * FROM users WHERE id = ?;", (1,))
     assert user["language"] == "en"
 
 
@@ -232,7 +232,7 @@ def test_api_get_summary(client, sample_audio: Path):
     assert s["days"] == 7
     assert s["total_sales"] == 45000
     assert s["total_expenses"] == 2000 + 5000
-    assert s["top_sale_item"]["item"] == "rice"
+    assert s["top_sale_item"]["item"] == "Rice"  # parser capitalises item names
     assert s["top_expense_item"]["total_amount"] == 5000  # snacks > transport
 
 

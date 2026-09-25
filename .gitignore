@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime SQLite data — never commit live trader data.
+ledger.db

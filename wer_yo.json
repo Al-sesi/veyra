@@ -1,0 +1,74 @@
+{
+  "yo": {
+    "fleurs_config": "yo_ng",
+    "clips_scored": 10,
+    "ref_words": 251,
+    "corpus_wer": 0.3227,
+    "clips": [
+      {
+        "file": "5870539502284551712.wav",
+        "wer": 0.4286,
+        "ref": "abala ipin fomati yii pinpin pelu mejila lati le ni odidi nomba onipinpin ni a ma ni o je 3 2",
+        "hyp": "a bala ipin-fọmọti yii, pinpin pẹlu mejila lati le ni odidi-nọmba oni pimpin ni a maa n ni o jẹ tirisotu"
+      },
+      {
+        "file": "7720086062185930209.wav",
+        "wer": 0.4762,
+        "ref": "abala ipin fomati yii pinpin pelu mejila lati le ni odidi nomba onipinpin ni a ma ni o je 3 2",
+        "hyp": "alábálà ìpín-ìfọ́mátì pínpín pẹ̀lú méjìlá láti lè ní odidi náàmbà oní pínpín ní àmàhùn ní o jẹ́ tiríreṣòtú"
+      },
+      {
+        "file": "8374716981928223422.wav",
+        "wer": 0.4286,
+        "ref": "abala ipin fomati yii pinpin pelu mejila lati le ni odidi nomba onipinpin ni a ma ni o je 3 2",
+        "hyp": "àbálà ìpín-ìfọ́mátì yìí pínpín pẹ̀lú méjìlá àti lè ní òdìdì nọ́mbà òní pínpín ni a máa ń nílò jẹ́ terí ìrìṣòtú"
+      },
+      {
+        "file": "257821676980719568.wav",
+        "wer": 0.4359,
+        "ref": "eto ni sise n tele ki i se ona kiko eko sugbon iranlowo to n pese atileyin fun olukuluku to n ni iriri eko titunn bi eyi to n lo eto titun lori komputa tabi bere ise akanse tiitun",
+        "hyp": "eto ni ṣiṣẹ n tẹle ki ṣe ọna kikọ ẹkọ ṣugbọn iranlọwọ to ni pese atilẹyin fun olukuluku, to ni iriri ẹktútà, tàbí bè̩rè̩ì sẹ́ àkàns̩e títún"
+      },
+      {
+        "file": "15902642246980743582.wav",
+        "wer": 0.2308,
+        "ref": "eto ni sise n tele ki i se ona kiko eko sugbon iranlowo to n pese atileyin fun olukuluku to n ni iriri eko titunn bi eyi to n lo eto titun lori komputa tabi bere ise akanse tiitun",
+        "hyp": "ètò ni ṣisẹ̀ntẹ̀lẹ́ kìí ṣe ọ̀nà kíkọ́ ẹ̀kọ́, ṣùgbọ́n, ìrànlọ́wọ́ tó ń pèsè àtìlẹ́yìn fún olúkúlùkù tó ní ìrírí ẹ̀kọ́ títún, bí èyí tó ń lo ètò tuntun lórí kọ̀mpútà tàbí bẹ̀rẹ̀ iṣẹ̀ àkànṣe títún."
+      },
+      {
+        "file": "9587778337642154158.wav",
+        "wer": 0.1538,
+        "ref": "eto ni sise n tele ki i se ona kiko eko sugbon iranlowo to n pese atileyin fun olukuluku to n ni iriri eko titunn bi eyi to n lo eto titun lori komputa tabi bere ise akanse tiitun",
+        "hyp": "ètò ni sísẹ̀ ń tẹ̀lé kìí ṣe ọ̀nà kíkọ́ ẹ̀kọ́, ṣùgbọ́n, ìrànlọ́wọ́ tó ń pèsè àtìlẹ́yìn fún olúkúlùkù tó ní ìrírí ẹ̀kọ́ títún bí èyí tó ń lo ètò títún lórí kọ̀m̀pútà tàbí bẹ̀rẹ̀ṣì iṣẹ́ àkànṣe títún."
+      },
+      {
+        "file": "15900333819536910508.wav",
+        "wer": 0.3333,
+        "ref": "gbogbo nkan ile aye ni o kere gbogbo nkn kekere ni o wa lati atoms",
+        "hyp": "gbogbòn gan-an ilé-ayé ni ó kéré, gbogbòn kékéré ni ó wá láti atoḿs̩"
+      },
+      {
+        "file": "5254370266370682877.wav",
+        "wer": 0.4,
+        "ref": "gbogbo nkan ile aye ni o kere gbogbo nkn kekere ni o wa lati atoms",
+        "hyp": "gbogbo rìn kan ilé ayé ni ó kéré, gbogbo rìn kan kékéré ni ó wá láti atom's."
+      },
+      {
+        "file": "3564680886158909821.wav",
+        "wer": 0.2667,
+        "ref": "gbogbo nkan ile aye ni o kere gbogbo nkn kekere ni o wa lati atoms",
+        "hyp": "gbogbo nkan ilé ayéyìí ni o kéré, gbogbo nkan kékeré ni o wa lati atom's."
+      },
+      {
+        "file": "9624146296415990618.wav",
+        "wer": 0.2308,
+        "ref": "won ni ese to ni pele ati eekan won n ye eyin ati pe won n rin pelu ese eyin won meji bii ti t rex",
+        "hyp": "wọn ní ẹṣẹ tó ní pélé àti èkàn, wọn yé ẹyin àti pé wọ́n rìn pẹ̀lú ẹṣẹ́ ẹ̀yìn wọn méjèèjì bíi ti tìrẹ̀sì"
+      }
+    ]
+  },
+  "pcm": {
+    "skipped": true,
+    "reason": "No Pidgin config in FLEURS or Common Voice; the -l pcm route is backed by NCAIR1/NigerianAccentedEnglish and must be validated with real recorded Pidgin voice notes."
+  }
+}

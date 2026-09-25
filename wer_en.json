@@ -1,0 +1,74 @@
+{
+  "en": {
+    "fleurs_config": "en_us",
+    "clips_scored": 10,
+    "ref_words": 184,
+    "corpus_wer": 0.1141,
+    "clips": [
+      {
+        "file": "12741024238657315067.wav",
+        "wer": 0.1176,
+        "ref": "unfortunately studying traffic flow is difficult because driver behavior cannot be predicted with one hundred percent certainty",
+        "hyp": "unfortunately, studying traffic flow is difficult because driver behavior cannot be predicted with 100-percent certainty."
+      },
+      {
+        "file": "9055240296608129734.wav",
+        "wer": 0.1765,
+        "ref": "unfortunately studying traffic flow is difficult because driver behavior cannot be predicted with one hundred percent certainty",
+        "hyp": "unfortunately, studying traffic flow is difficult because driver behavior cannot be predicted with 100% certainty."
+      },
+      {
+        "file": "621925716775998155.wav",
+        "wer": 0.0625,
+        "ref": "twentieth century research has shown that there are two pools of genetic variation hidden and expressed",
+        "hyp": "20th-century research has shown that there are two pools of genetic variation, hidden and expressed"
+      },
+      {
+        "file": "10335587906469246566.wav",
+        "wer": 0.0625,
+        "ref": "twentieth century research has shown that there are two pools of genetic variation hidden and expressed",
+        "hyp": "20th-century research has shown that there are two pools of genetic variation hidden and expressed"
+      },
+      {
+        "file": "2589557553267364799.wav",
+        "wer": 0.069,
+        "ref": "remember that even though music on the main stages may have finished there may be sections of the festival that will keep playing music until late into the night",
+        "hyp": "remember that even though music on the main stages may have finished, there may be sessions of the festival that will keep playing music until lay into the night."
+      },
+      {
+        "file": "17824557748066874904.wav",
+        "wer": 0.069,
+        "ref": "remember that even though music on the main stages may have finished there may be sections of the festival that will keep playing music until late into the night",
+        "hyp": "remember that even though music on the main stages may have finished, there may be sessions at the festival that will keep playing music until late into the night."
+      },
+      {
+        "file": "8173060820032255320.wav",
+        "wer": 0.3571,
+        "ref": "police superintendent chandra shekhar solanki said the accused appeared in court with covered faces",
+        "hyp": "police superintendent shandra shankar soleski said dqs appeared in court with covered faces."
+      },
+      {
+        "file": "15618717836108767541.wav",
+        "wer": 0.2143,
+        "ref": "police superintendent chandra shekhar solanki said the accused appeared in court with covered faces",
+        "hyp": "police superintendent shandra shekar salonki said the accused appeared in court with covered faces."
+      },
+      {
+        "file": "2652155470394119415.wav",
+        "wer": 0.0625,
+        "ref": "the term bug is used by entomologists in a formal sense for this group of insects",
+        "hyp": "the term bug is used by entomologists and a formal sense for this group of insects."
+      },
+      {
+        "file": "14585898865749103727.wav",
+        "wer": 0.0625,
+        "ref": "the term bug is used by entomologists in a formal sense for this group of insects",
+        "hyp": "the term bug is used by entomologists and a formal sense for this group of insects."
+      }
+    ]
+  },
+  "pcm": {
+    "skipped": true,
+    "reason": "No Pidgin config in FLEURS or Common Voice; the -l pcm route is backed by NCAIR1/NigerianAccentedEnglish and must be validated with real recorded Pidgin voice notes."
+  }
+}

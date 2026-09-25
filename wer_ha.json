@@ -1,0 +1,74 @@
+{
+  "ha": {
+    "fleurs_config": "ha_ng",
+    "clips_scored": 10,
+    "ref_words": 256,
+    "corpus_wer": 0.2773,
+    "clips": [
+      {
+        "file": "5153420622149111720.wav",
+        "wer": 0.4348,
+        "ref": "finland babban wurin zuwan kwalekwale ne ƙasa mai tafkuna dubu tana kuma da dubban tsibirai a cikin tafkuna da kuma cikin rukunin tsibirai",
+        "hyp": "fim lamb babban wurin zuwa kwale-kwale ne, ƙasa mai tafkuna da kuma da dabban tibirai, a cikin tafkuna da kuma cikin rukunin tibirai."
+      },
+      {
+        "file": "3265784646728431027.wav",
+        "wer": 0.3548,
+        "ref": "an aika tauraron dan adam zuwa sararin samaniya ta hanyar roka masana kimiyya suna amfani da madubin hangen nesa a sararin samaniya saboda yanayin duniya yana gurbata wasu haskenmu da kallo",
+        "hyp": "an aika tauraron dan adam su a sararar samaniya ta hanyar roga, masana kimiyya suna amfani da madugin hankali ne su a sararar samaniya saboda yanayin duniya yana gurbe ta wasu haskenmu da kallo."
+      },
+      {
+        "file": "14673679967845668374.wav",
+        "wer": 0.0968,
+        "ref": "an aika tauraron dan adam zuwa sararin samaniya ta hanyar roka masana kimiyya suna amfani da madubin hangen nesa a sararin samaniya saboda yanayin duniya yana gurbata wasu haskenmu da kallo",
+        "hyp": "an aikata tauraron dan adam zuwa sararin samaniya ta hanyar roka, masana kimiyya suna amfani da madubin hanyar nesa a sararin samaniya saboda yanayin duniya yana gurɓata wasu haskenmu da kallo."
+      },
+      {
+        "file": "17797806635973582510.wav",
+        "wer": 0.1935,
+        "ref": "an aika tauraron dan adam zuwa sararin samaniya ta hanyar roka masana kimiyya suna amfani da madubin hangen nesa a sararin samaniya saboda yanayin duniya yana gurbata wasu haskenmu da kallo",
+        "hyp": "an aika tauraron ɗan adam zuwa sararar samaniya ta hanyar roka, masanaƙimiya suna amfani da madubin hanyar nesa a sararar samaniya saboda yanayin duniya, yana gurbata wasu haskenmu da kallo."
+      },
+      {
+        "file": "10966754724865272648.wav",
+        "wer": 0.2917,
+        "ref": "cutar ms cuta ce da ke shafar lakkar jikin dan adam da ya hadar da kwakwalwa da jijiyar lakkar da kuma na kai sakonni",
+        "hyp": "cutar ms cuta ce dake shafar lakkar jikin ɗan adam da ya haɗa da kwakwalwa da jijiyar laka da kuma na kai sa kunnu."
+      },
+      {
+        "file": "6617224182117504758.wav",
+        "wer": 0.25,
+        "ref": "cutar ms cuta ce da ke shafar lakkar jikin dan adam da ya hadar da kwakwalwa da jijiyar lakkar da kuma na kai sakonni",
+        "hyp": "cutar emes cuta ce da ke shafar lakkar jikin an adam, da ya haɗar da kwakwan wa da jijiyar lakkar da kuma na kai sakannin."
+      },
+      {
+        "file": "7524079887624895833.wav",
+        "wer": 0.1111,
+        "ref": "ana alaƙanta sinadarai kamar calcium da kanwa a zaman ƙarafa tabbas akwai kuma ƙarafa kamar azurfa da zinare",
+        "hyp": "ana alaƙanta sinadarai kamar kashiyar da kanwa a zaman ƙarafa tabbas akwai kuma ƙarafa kamar azurfa da zinari."
+      },
+      {
+        "file": "4049862357899331900.wav",
+        "wer": 0.4444,
+        "ref": "ana alaƙanta sinadarai kamar calcium da kanwa a zaman ƙarafa tabbas akwai kuma ƙarafa kamar azurfa da zinare",
+        "hyp": "ana alaƙanta suna da rai kamar karshen da kama'a zaman karrafa, tabbas akwai kuma kafar, kamar azurfa, da zinari."
+      },
+      {
+        "file": "768729185023132590.wav",
+        "wer": 0.3889,
+        "ref": "haka nan tsakanin kowace daula a kan sami lokaci na rashin zaman lafiya tsakanin larduna fitacce daga waɗannan zamuna shi ne zamanin masarautu uku da ya faru tsawon shekaru 60 tsakanin daular han da ta jin",
+        "hyp": "hakanin tsakanin kowace daula, akan sami lokaci na rashin zaman lafiya, tsakanin larduna, fitashe daga waɗannan zamuna shine zamanin masarautu, kuku da yafaru tsawon shekara sittin, tsakanin daurar hannu da ta jin."
+      },
+      {
+        "file": "14735148139795091606.wav",
+        "wer": 0.2,
+        "ref": "ba lallai mutane su fahimci cewa yin haƙuri da nuna fahimta wajibi ne ga matafiya da ke kokarin komawa gida",
+        "hyp": "balan laif mutane su fahimci cewa yin hakuri da nuna fahimta wajibi ne, ga matafiya da ke kamar komawa gida."
+      }
+    ]
+  },
+  "pcm": {
+    "skipped": true,
+    "reason": "No Pidgin config in FLEURS or Common Voice; the -l pcm route is backed by NCAIR1/NigerianAccentedEnglish and must be validated with real recorded Pidgin voice notes."
+  }
+}

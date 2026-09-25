@@ -1,14 +1,18 @@
 """
 Speech-to-text module for sabi-books.
 
-Wraps Hugging Face N-ATLaS Whisper models (e.g. NCAIR1/Hausa-ASR,
-NCAIR1/Igbo-ASR) and exposes a simple ``transcribe(audio_path, language)``
-function.  WhatsApp voice notes arrive as .ogg (Opus); we normalise any
-input to 16 kHz mono WAV via ffmpeg before passing it to the model.
+Wraps Hugging Face N-ATLaS Whisper models -- NCAIR1/Yoruba-ASR,
+NCAIR1/Hausa-ASR, NCAIR1/Igbo-ASR and NCAIR1/NigerianAccentedEnglish
+(which also backs the experimental ``pcm`` route) -- and exposes a simple
+``transcribe(audio_path, language)`` function.  WhatsApp voice notes
+arrive as .ogg (Opus); we normalise any input to 16 kHz mono WAV via
+ffmpeg before passing it to the model.
 
 Usage patterns follow each model card:
+    https://huggingface.co/NCAIR1/Yoruba-ASR
     https://huggingface.co/NCAIR1/Hausa-ASR
     https://huggingface.co/NCAIR1/Igbo-ASR
+    https://huggingface.co/NCAIR1/NigerianAccentedEnglish
 
 We use the ``transformers`` ``pipeline`` helper exactly as the model cards
 recommend in their "Basic Usage" example:
@@ -117,23 +121,17 @@ LANGUAGE_MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     # Nigerian-accented English / Pidgin.
     #
-    # NCAIR1 do not (yet) publish a standalone Pidgin-ASR checkpoint.
-    # Their NCAIR1/NigerianAccentedEnglish (Whisper-Small fine-tune on
-    # 6-zone Nigerian speech, which explicitly includes Pidgin phrases
-    # and Nigerian English patterns per its model card) is the closest
-    # official N-ATLaS offering — so we expose it under BOTH codes:
-    #   * `pcm` (ISO 639-3 for Nigerian Pidgin) – for traders using the
-    #     Pidgin / Naija alias, and
-    #   * `en`  – for users that still pass `language="en"` expecting
-    #     Nigerian English, so that voice notes recorded in Nigerian
-    #     English still count as N-ATLaS-backed evidence instead of
-    #     falling back to generic OpenAI Whisper.
-    # If a dedicated NCAIR1/Pidgin-ASR or NCAIR1/English-ASR checkpoint
-    # is released later, swap only the `model` string for the code you
-    # want to retarget.
+    # NCAIR1 do not (yet) publish a standalone Pidgin-ASR checkpoint, so
+    # `pcm` routes to the SAME NCAIR1/NigerianAccentedEnglish checkpoint
+    # as `en` (their Whisper-Small fine-tune on 6-zone Nigerian speech,
+    # which includes Pidgin phrases and Nigerian English patterns per its
+    # model card) and is marked "experimental, untested".  If a dedicated
+    # NCAIR1/Pidgin-ASR checkpoint is released later, swap only the
+    # `model` string for `pcm`.
     "pcm": {
         "model": "NCAIR1/NigerianAccentedEnglish",
         "display_name": "Pidgin (Nigerian Accented English)",
+        "experimental": True,
     },
     "en": {
         "model": "NCAIR1/NigerianAccentedEnglish",
@@ -142,8 +140,10 @@ LANGUAGE_MODEL_CONFIG: Dict[str, Dict[str, Any]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Per-language model cache (processor + pipeline).  Loaded lazily on first
-# use and retained for subsequent calls.  Keys are language codes.
+# Model cache (pipeline per checkpoint).  Loaded lazily on first use and
+# retained for subsequent calls.  Keys are model repo ids -- NOT language
+# codes -- so languages that share a checkpoint (`en` and `pcm` both use
+# NCAIR1/NigerianAccentedEnglish) reuse a single loaded pipeline.
 # ---------------------------------------------------------------------------
 _MODEL_CACHE: Dict[str, Any] = {}
 
@@ -161,9 +161,11 @@ def _resolve_language(language: str) -> str:
         "pidgin": "pcm",
         "naija": "pcm",
         "nigerian pidgin": "pcm",
-        "nigerian english": "pcm",
-        "nigerianaccentedenglish": "pcm",
-        "en-ng": "pcm",
+        # Nigerian English is a fully supported language (same checkpoint
+        # as `pcm`, but without the experimental/untested flag).
+        "nigerian english": "en",
+        "nigerianaccentedenglish": "en",
+        "en-ng": "en",
     }
     lang = aliases.get(lang, lang)
     if lang not in LANGUAGE_MODEL_CONFIG:
@@ -172,6 +174,23 @@ def _resolve_language(language: str) -> str:
             f"{sorted(LANGUAGE_MODEL_CONFIG.keys())}"
         )
     return lang
+
+
+def language_notice(language: str) -> Optional[str]:
+    """Return a user-facing caveat for ``language``, or None if it is stable.
+
+    ``pcm`` (Nigerian Pidgin) is routed to the NCAIR1/NigerianAccentedEnglish
+    checkpoint and shipped as "experimental, untested"; callers (CLI, API)
+    should show this notice so nobody mistakes Pidgin transcripts for
+    validated output.
+    """
+    cfg = LANGUAGE_MODEL_CONFIG[_resolve_language(language)]
+    if not cfg.get("experimental"):
+        return None
+    return (
+        f"Warning: {cfg['display_name']} support is experimental and untested "
+        f"(routed to the {cfg['model']} checkpoint)."
+    )
 
 
 def _check_ffmpeg() -> None:
@@ -249,24 +268,28 @@ def _load_pipeline(lang_code: str):
     ``app.asr`` doesn't force 2+ GB of model libraries to load eagerly;
     the cold start cost is only paid on the first call to ``transcribe``.
     """
-    if lang_code in _MODEL_CACHE:
-        return _MODEL_CACHE[lang_code]
+    cfg = LANGUAGE_MODEL_CONFIG[lang_code]
+    model_name = cfg["model"]
+
+    if model_name in _MODEL_CACHE:
+        return _MODEL_CACHE[model_name]
 
     # Imported lazily -- they are heavy.
     from transformers import pipeline  # noqa: PLC0415
 
-    cfg = LANGUAGE_MODEL_CONFIG[lang_code]
-    model_name = cfg["model"]
-
-    # Exact usage pattern from both Hausa-ASR and Igbo-ASR model cards
-    # ("Basic Usage" section):
+    # Exact usage pattern from all four NCAIR1 model cards ("Basic Usage"
+    # section), e.g.:
     #   asr = pipeline("automatic-speech-recognition", model="NCAIR1/Hausa-ASR")
+    # Every card caps inference at 30 s of audio, so chunk_length_s=30 both
+    # follows the card and lets long voice notes run without raising
+    # "more than 3000 mel input features".
     pipe = pipeline(
         task="automatic-speech-recognition",
         model=model_name,
+        chunk_length_s=30,
     )
 
-    _MODEL_CACHE[lang_code] = pipe
+    _MODEL_CACHE[model_name] = pipe
     return pipe
 
 
@@ -297,10 +320,11 @@ def transcribe(audio_path: str, language: str) -> str:
         Path to the input audio.  Any format supported by ffmpeg works;
         WhatsApp's default .ogg (Opus) is converted automatically.
     language : str
-        Language code or name, e.g. ``"ha"``, ``"ig"``, ``"en"``,
-        ``"hausa"``, ``"igbo"``.  Must match an entry in
-        ``LANGUAGE_MODEL_CONFIG`` (add a new entry there to support
-        Yoruba or other languages later).
+        Language code or name: ``"yo"``, ``"ha"``, ``"ig"``, ``"en"`` or
+        ``"pcm"`` (aliases such as ``"Yoruba"``, ``"Hausa"``, ``"Naija"``
+        also work).  Must match an entry in ``LANGUAGE_MODEL_CONFIG``
+        (add a new entry there to support more languages).  ``pcm`` is
+        marked experimental and untested -- see ``language_notice``.
 
     Returns
     -------

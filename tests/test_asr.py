@@ -185,14 +185,15 @@ def test_resolve_language_accepts_code_and_display_name():
     # Yoruba (NCAIR1/Yoruba-ASR)
     assert asr_module._resolve_language("yo") == "yo"
     assert asr_module._resolve_language("Yoruba") == "yo"
-    # Pidgin -> pcm (NCAIR1/NigerianAccentedEnglish backing)
+    # Pidgin -> pcm (NCAIR1/NigerianAccentedEnglish backing, experimental)
     assert asr_module._resolve_language("pcm") == "pcm"
     assert asr_module._resolve_language("Pidgin") == "pcm"
     assert asr_module._resolve_language("Naija") == "pcm"
     assert asr_module._resolve_language("Nigerian Pidgin") == "pcm"
-    assert asr_module._resolve_language("en-ng") == "pcm"
-    # English fallback
+    # Nigerian English -> en (same checkpoint as pcm, but NOT experimental)
     assert asr_module._resolve_language("English") == "en"
+    assert asr_module._resolve_language("Nigerian English") == "en"
+    assert asr_module._resolve_language("en-ng") == "en"
 
 
 def test_resolve_language_unknown_raises():
@@ -295,3 +296,58 @@ def test_language_config_has_core_nigerian_language_entries():
             f"checkpoint; the integration requires all voice transcription "
             f"to count as evidence."
         )
+
+
+def test_pcm_routes_to_en_model_and_is_marked_experimental():
+    """
+    N-ATLaS spec: `en` is backed by NCAIR1/NigerianAccentedEnglish and
+    `pcm` must route to that SAME checkpoint, flagged "experimental,
+    untested" (no dedicated NCAIR1 Pidgin checkpoint exists yet).
+    """
+    cfg = asr_module.LANGUAGE_MODEL_CONFIG
+
+    assert cfg["en"]["model"] == "NCAIR1/NigerianAccentedEnglish"
+    assert cfg["pcm"]["model"] == cfg["en"]["model"]
+    assert cfg["pcm"].get("experimental") is True
+    assert not cfg["en"].get("experimental")
+
+
+def test_language_notice_warns_only_for_experimental_languages():
+    """`language_notice` is the user-facing experimental/untested marker."""
+    for stable in ("ha", "ig", "yo", "en", "Hausa", "English", "Yoruba"):
+        assert asr_module.language_notice(stable) is None
+
+    notice = asr_module.language_notice("pcm")
+    assert notice is not None
+    lowered = notice.lower()
+    assert "experimental" in lowered
+    assert "untested" in lowered
+    # Pidgin aliases surface the exact same warning
+    assert asr_module.language_notice("Pidgin") == notice
+    assert asr_module.language_notice("Naija") == notice
+
+
+def test_en_and_pcm_share_one_loaded_pipeline(monkeypatch):
+    """
+    Both codes point at NCAIR1/NigerianAccentedEnglish, so the model cache
+    (keyed by repo id) must load the checkpoint once and hand the same
+    pipeline to both languages.
+    """
+    import sys
+    import types
+
+    loaded_models = []
+
+    def _fake_pipeline(task, model, chunk_length_s=None):
+        loaded_models.append(model)
+        return _FakeASRPipeline(return_text="na so")
+
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.pipeline = _fake_pipeline
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    pcm_pipe = asr_module._load_pipeline("pcm")
+    en_pipe = asr_module._load_pipeline("en")
+
+    assert pcm_pipe is en_pipe
+    assert loaded_models == ["NCAIR1/NigerianAccentedEnglish"]

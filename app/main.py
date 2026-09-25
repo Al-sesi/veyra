@@ -1,13 +1,17 @@
 """
-FastAPI application exposing three endpoints:
+FastAPI application exposing four endpoints:
 
   - POST /voice-note     Upload an audio file and language/user_id; run
-                          ASR -> parser -> ledger persistence, and return
-                          the transcript + saved entries + 7-day summary.
+                          ASR -> intent routing -> ledger persistence, and
+                          return the transcript + saved entries + 7-day
+                          summary + reply_text (what to say back).
   - GET  /ledger/{user_id}?limit=50
                          Recent entries for a user (newest first).
   - GET  /summary/{user_id}?days=7
-                         Aggregated totals + top items over a rolling window.
+                         Aggregated totals + top items over a rolling window,
+                         plus open-debt totals.
+  - GET  /debts/{user_id}
+                         Open (unpaid) debts for a user.
 
 Uses sqlite3 via app.db/app.ledger/app.pipeline. No third-party DB libraries.
 """
@@ -23,14 +27,14 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.db import DEFAULT_DB_PATH, init_db
-from app.ledger import get_summary, list_entries
+from app.ledger import get_summary, list_entries, list_open_debts
 from app.pipeline import process_voice_note
 
 
 # Make sure tables exist before the first request hits. FastAPI calls this on
 # startup exactly once per process (so DB is initialised both under `uvicorn`
 # and in the TestClient used by unit tests).
-app = FastAPI(title="sabi-books", version="0.1.0")
+app = FastAPI(title="Veyra", version="0.1.0")
 
 
 @app.on_event("startup")
@@ -93,6 +97,7 @@ async def voice_note(
                 "transcript": result["transcript"],
                 "entries": result["entries"],
                 "summary": result["summary"],
+                "reply_text": result["reply_text"],
             }
         )
     except FileNotFoundError as exc:
@@ -118,3 +123,9 @@ def summary(user_id: int, days: int = 7):
         raise HTTPException(status_code=400, detail="days out of range")
     payload = get_summary(user_id=user_id, days=days)
     return {"user_id": user_id, "days": days, **payload}
+
+
+@app.get("/debts/{user_id}")
+def debts(user_id: int):
+    """Open (unpaid) debts for a user, newest first."""
+    return {"user_id": user_id, "debts": list_open_debts(user_id=user_id)}

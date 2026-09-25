@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from typing import List, Optional, Dict, Any, Tuple
 
 
@@ -20,12 +21,71 @@ TENS_WORDS = {"twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty"
 ONES_WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 SCALE_WORDS = {"hundred", "thousand", "million"}
 
+# ---------------------------------------------------------------------------
+# Yoruba number words, stored diacritic-folded ("ẹgbẹ̀rún" -> "egberun").
+# Note the order difference: Yoruba puts the scale word BEFORE its multiplier
+# ("ẹgbẹ̀rún márùn-ún" = 1000 x 5 = 5,000) while English puts it after
+# ("five thousand" = 5 x 1000).
+# ---------------------------------------------------------------------------
+YORUBA_NUMBER_WORDS: Dict[str, int] = {
+    "okan": 1, "kan": 1,
+    "meji": 2, "eji": 2,
+    "meta": 3, "eta": 3,
+    "merin": 4, "erin": 4,
+    "marun": 5, "arun": 5,
+    "mefa": 6, "efa": 6,
+    "meje": 7, "eje": 7,
+    "mejo": 8, "ejo": 8,
+    "mesan": 9, "esan": 9,
+    "mewa": 10, "ewa": 10,
+    "ogun": 20,
+    "ogoji": 40,
+    "egberun": 1000,
+    "milionu": 1000000,
+}
+
+# Short tails glued onto Yoruba number words with a hyphen, e.g. "márùn-ún"
+# (= 5) or "ọ̀kàn-ún" (= 1). They carry no numeric value of their own.
+YORUBA_NUMBER_TAILS = {"un", "an", "aa"}
+
+
+def strip_diacritics(text: str) -> str:
+    """Fold diacritics to base letters: "Ẹ̀tà" -> "Eta", "ò" -> "o", "ṣ" -> "s".
+
+    ASR output may or may not emit Yoruba tone marks, so both sides of a match
+    are folded. Callers that need character offsets (app/intents) must map
+    indices back themselves; this helper only transforms the text.
+    """
+    if not text:
+        return text
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+
+
+def _lookup_number_word(word: str) -> Optional[int]:
+    """Value of an English or (diacritic-folded) Yoruba number word, else None.
+
+    Yoruba filler tails are handled too: "márùn-ún" and "marun-un" -> 5.
+    """
+    w = word.lower().strip(".,!?;:")
+    if w in WORD_NUMBERS:
+        return WORD_NUMBERS[w]
+    folded = strip_diacritics(w)
+    if folded in YORUBA_NUMBER_WORDS:
+        return YORUBA_NUMBER_WORDS[folded]
+    if "-" in folded:
+        head, *tails = folded.split("-")
+        if tails and all(t in YORUBA_NUMBER_TAILS for t in tails):
+            return YORUBA_NUMBER_WORDS.get(head)
+    return None
+
 
 def parse_written_number_words(words: List[str]) -> Optional[int]:
     """
     Parse a list of pure word-only number tokens (no Arabic numerals, no k)
-    into an integer.
-    Example: ["five", "thousand"] -> 5000, ["twenty", "five"] -> 25
+    into an integer. Accepts English and Yoruba number words.
+    Example: ["five", "thousand"] -> 5000, ["twenty", "five"] -> 25,
+             ["egberun", "marun"] -> 5000 (Yoruba word order).
     Returns None if the tokens don't form a valid number phrase.
     """
     if not words:
@@ -33,14 +93,25 @@ def parse_written_number_words(words: List[str]) -> Optional[int]:
 
     # Lowercase and strip punctuation for comparison
     clean = [w.lower().strip(".,!?;:") for w in words]
+    values: List[int] = []
     for w in clean:
-        if w not in WORD_NUMBERS:
+        v = _lookup_number_word(w)
+        if v is None:
             return None
+        values.append(v)
+
+    # Yoruba puts the scale word first: "ẹgbẹ̀rún márùn-ún" = 1000 * 5.
+    # English ("five thousand") starts with the multiplier, so it never
+    # enters this branch and keeps the original accumulation logic below.
+    if values[0] >= 1000:
+        multiplier = sum(values[1:])
+        if len(values) == 1:
+            return values[0]
+        return values[0] * multiplier if multiplier > 0 else None
 
     total = 0
     current = 0
-    for w in clean:
-        v = WORD_NUMBERS[w]
+    for v in values:
         if v >= 1000:  # thousand / million
             current *= v
             total += current
@@ -67,6 +138,12 @@ def parse_slang_hyphenated(token: str) -> Optional[int]:
         return None
     parts = token.lower().strip(".,!?;:").split("-")
     if not all(p in WORD_NUMBERS for p in parts):
+        # Yoruba number words can carry a filler tail after a hyphen:
+        # "márùn-ún" (= 5), "ọ̀kàn-ún" (= 1), "mẹ́sàn-án" (= 9).
+        if len(parts) > 1 and all(
+            strip_diacritics(p) in YORUBA_NUMBER_TAILS for p in parts[1:]
+        ):
+            return _lookup_number_word(parts[0])
         return None
 
     if len(parts) == 2 and parts[0] in ONES_WORDS and parts[1] in TENS_WORDS:
@@ -79,34 +156,47 @@ def parse_slang_hyphenated(token: str) -> Optional[int]:
 
 def _strip_thousand_separators(token: str) -> str:
     """
-    Remove comma thousand-separators from a numeric-looking token.
+    Remove thousands separators from a numeric-looking token.
 
-    Valid thousand-separator patterns (digit-comma-digit, exactly 3 digits between,
-    repeated as needed):
+    Comma separators (English/Arabic style, exactly 3 digits per group):
         "45,000"      -> "45000"
         "1,234,567"   -> "1234567"
         "45,000k"     -> "45000k"       (k-shorthand preserved)
         "45,000naira" -> "45000naira"   (currency suffix preserved)
         "2,500.75"    -> "2500.75"      (decimal mixed with thousand-sep)
 
-    Anything that doesn't cleanly match the thousand-sep structure is
-    returned untouched (so hyphenated slang like "two-fifty" and normal
-    punctuation keep their commas if any).
+    Dot separators (seen in Yoruba ASR output, e.g. "5.000 naira" = 5,000):
+        "5.000"       -> "5000"
+        "1.234.567"   -> "1234567"
+
+    Anything that doesn't cleanly match a separator structure is returned
+    untouched (so hyphenated slang like "two-fifty" and decimals like "2.5k"
+    keep their punctuation).
     """
-    if "," not in token:
+    if "," in token:
+        # digits, then repeating (comma + 3 digits), optional decimal + digits,
+        # optional k/currency suffix.
+        m = re.match(
+            r"^(\d{1,3}(?:,\d{3})+)(\.\d+)?(k|naira|n|#)?$",
+            token,
+            flags=re.IGNORECASE,
+        )
+        if m:
+            core = m.group(1).replace(",", "")
+            decimal = m.group(2) or ""
+            suffix = m.group(3) or ""
+            return core + decimal + suffix
         return token
-    # Try: digits, then repeating (comma + 3 digits), optional decimal + more digits,
-    # optional k/currency suffix.
-    m = re.match(
-        r"^(\d{1,3}(?:,\d{3})+)(\.\d+)?(k|naira|n|#)?$",
-        token,
-        flags=re.IGNORECASE,
-    )
-    if m:
-        core = m.group(1).replace(",", "")
-        decimal = m.group(2) or ""
-        suffix = m.group(3) or ""
-        return core + decimal + suffix
+    if "." in token:
+        # Exactly 3 digits per dot-group, so "2.5k" stays a decimal.
+        m = re.match(
+            r"^(\d{1,3}(?:\.\d{3})+)(k|naira|n|#)?$",
+            token,
+            flags=re.IGNORECASE,
+        )
+        if m:
+            return m.group(1).replace(".", "") + (m.group(2) or "")
+        return token
     return token
 
 
@@ -159,8 +249,15 @@ def parse_tokens_as_number(tokens: List[str]) -> Tuple[Optional[int], Optional[s
         slang = parse_slang_hyphenated(tok)
         if slang is not None:
             return slang, raw_text
-        # Pattern: single word number
-        if tok in WORD_NUMBERS:
+        # Pattern: spelled-out value with a trailing k, e.g. "sevenk" -> 7000
+        # (ASR sometimes glues the k-shorthand onto the number word).
+        m4 = re.match(r"^([a-z]+)k$", tok)
+        if m4:
+            base = _lookup_number_word(m4.group(1))
+            if base is not None:
+                return base * 1000, raw_text
+        # Pattern: single word number (English or Yoruba)
+        if _lookup_number_word(tok) is not None:
             return parse_written_number_words([tok]), raw_text
         return None, None
 
@@ -169,8 +266,9 @@ def parse_tokens_as_number(tokens: List[str]) -> Tuple[Optional[int], Optional[s
     # Normalize tokens to lowercase/stripped forms preserving order
     # ------------------------------------------------------------------
     stripped = [t.strip().lower().strip(".,!?;:₦$") for t in tokens]
-    # Drop trailing currency markers from consideration
-    while stripped and stripped[-1] in {"naira", "n", "#"}:
+    # Drop trailing currency markers from consideration ("náírà" only differs
+    # from "naira" by diacritics, so compare folded forms)
+    while stripped and strip_diacritics(stripped[-1]) in {"naira", "n", "#"}:
         stripped.pop()
     if not stripped:
         return None, None
@@ -238,7 +336,9 @@ def find_numeric_phrases(segment: str) -> List[Dict[str, Any]]:
                 # Detect k-shorthand / currency
                 lowered = text.lower()
                 has_k = bool(re.search(r"\d+(?:\.\d+)?k", lowered))
-                has_currency = bool(re.search(r"(naira|[#₦$])", lowered)) or (
+                has_currency = bool(
+                    re.search(r"(naira|[#₦$])", strip_diacritics(lowered))
+                ) or (
                     any(t[2].lower().strip(".,!?;:") == "n" and i + length - 1 == j
                         for j, t in enumerate(tokens[i:i+length]))
                 )
@@ -280,13 +380,27 @@ EXPENSE_WORDS = [
 
 EXPENSE_ITEMS = {"transport", "rent", "fare", "fuel", "petrol", "diesel", "light", "electricity"}
 
+# Yoruba transaction words, stored diacritic-folded ("ra" = buy, "tà" = sell,
+# "mọ́tò" = car). The verbs are only two letters, so they MUST be matched on
+# word boundaries: substring matching would find "ra" inside "transport".
+YORUBA_EXPENSE_WORDS = ["ra", "raa", "dera", "dara"]
+YORUBA_SALE_WORDS = ["ta", "taa", "tita"]
+YORUBA_EXPENSE_ITEMS = ["moto", "okada"]
+
+
+def _contains_word(text: str, word: str) -> bool:
+    """Whole-word match, used for the short Yoruba words after folding."""
+    return re.search(rf"\b{re.escape(word)}\b", text) is not None
+
 
 def detect_transaction_type(segment: str) -> Optional[str]:
     """
     Return "sale", "expense", or None based on keywords in the segment.
-    Handles both English and common Nigerian Pidgin phrasing.
+    Handles English, common Nigerian Pidgin phrasing, and Yoruba verbs
+    ("ra" = buy, "tà" = sell), matched diacritic-insensitively.
     """
     lowered = segment.lower()
+    folded = strip_diacritics(lowered)
 
     # Strong expense-item signals (transport / rent) override
     for item in EXPENSE_ITEMS:
@@ -295,6 +409,9 @@ def detect_transaction_type(segment: str) -> Optional[str]:
 
     expense_hits = sum(1 for w in EXPENSE_WORDS if w in lowered)
     sale_hits = sum(1 for w in SALE_WORDS if w in lowered)
+    expense_hits += sum(1 for w in YORUBA_EXPENSE_WORDS if _contains_word(folded, w))
+    expense_hits += sum(1 for w in YORUBA_EXPENSE_ITEMS if _contains_word(folded, w))
+    sale_hits += sum(1 for w in YORUBA_SALE_WORDS if _contains_word(folded, w))
 
     if expense_hits > sale_hits:
         return "expense"
@@ -355,6 +472,24 @@ def select_amount_and_quantity(numerics: List[Dict[str, Any]]) -> Tuple[Optional
     return amount, quantity
 
 
+def _is_numeric_token(clean: str) -> bool:
+    """True if a cleaned token is an amount/quantity: Arabic numerals,
+    k-shorthand, hyphenated slang, or an English/Yoruba number word."""
+    if re.match(r"^\d+(?:\.\d+)?(k)?$", clean):
+        return True
+    if _lookup_number_word(clean) is not None:
+        return True
+    if "-" in clean:
+        parts = clean.split("-")
+        if all(p in WORD_NUMBERS for p in parts):
+            return True
+        if len(parts) > 1 and all(
+            strip_diacritics(p) in YORUBA_NUMBER_TAILS for p in parts[1:]
+        ):
+            return _lookup_number_word(parts[0]) is not None
+    return False
+
+
 def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], tx_type: str) -> str:
     """
     Build a short item description by stripping amount, quantity, transaction
@@ -379,19 +514,19 @@ def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], t
         "today", "yesterday", "tomorrow", "now", "just",
         "am", "dem", "dey", "been", "market", "shop", "store",
         "levy", "fee",
+        # Yoruba particles/verbs (compared diacritic-folded)
+        "mo", "lo", "si", "ni", "ra", "ta", "tun", "ba", "wa", "wo", "mi",
+        "dewo", "dera", "dara", "pelu", "ati", "lowo", "owo", "loja",
+        "soja", "lonii",
     }
 
     words = text.split()
     filtered: List[str] = []
     for w in words:
         clean = w.strip(".,!?;:").lower()
-        if re.match(r"^\d+(?:\.\d+)?(k)?$", clean):
+        if _is_numeric_token(clean):
             continue
-        if "-" in clean:
-            parts = clean.split("-")
-            if all(p in WORD_NUMBERS for p in parts):
-                continue
-        if clean in stopwords:
+        if strip_diacritics(clean) in stopwords:
             continue
         filtered.append(w.strip(".,!?;:"))
 

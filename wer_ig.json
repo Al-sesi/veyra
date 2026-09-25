@@ -1,0 +1,74 @@
+{
+  "ig": {
+    "fleurs_config": "ig_ng",
+    "clips_scored": 10,
+    "ref_words": 284,
+    "corpus_wer": 0.3204,
+    "clips": [
+      {
+        "file": "458890823103776602.wav",
+        "wer": 0.35,
+        "ref": "oru nke ndi agha nke mmiri aburula kemgbe igba mbo hu na mba gi jidesiri ike ikikere ibughari ndi gi na ngwaahia gi ma n otu mgbe ahu na egbochi ikikere onye iro gi ibughari ndi ya na ngwaahia ya",
+        "hyp": "ọrụ nke dị agha nke mmiri abụrụla kemgbe ịgba mbụ. hụ na mgbagị jide siri ike ikikere ịbugharị ndị gị na ngwaahịa gị, ịbugharị ndị gị na ngwaahịa gị ma n'otu mgbu ahụ na-egbochi ikikere onye iro gị ibu ghara ndị ya na ngwaahịa ya."
+      },
+      {
+        "file": "2410335076217212792.wav",
+        "wer": 0.2,
+        "ref": "oru nke ndi agha nke mmiri aburula kemgbe igba mbo hu na mba gi jidesiri ike ikikere ibughari ndi gi na ngwaahia gi ma n otu mgbe ahu na egbochi ikikere onye iro gi ibughari ndi ya na ngwaahia ya",
+        "hyp": "ọrụ nke ndị agha nke mmiri ọbụla abụrụla kemgbe igba mbọ hụ na mgba gị jide siri ike ikikere ibugharị ndị gị na ngwaahịa gị ma n'otu mgbu ahụ na-egbochi ikikere onye iro gị igbugharị ndị agha na ngwaahịa."
+      },
+      {
+        "file": "16952372419996469943.wav",
+        "wer": 0.325,
+        "ref": "oru nke ndi agha nke mmiri aburula kemgbe igba mbo hu na mba gi jidesiri ike ikikere ibughari ndi gi na ngwaahia gi ma n otu mgbe ahu na egbochi ikikere onye iro gi ibughari ndi ya na ngwaahia ya",
+        "hyp": "ọrụ nke ndị agaghị nke mmiri ọ bụla kemgbe ịgba mgbo hụ na mgbagị jide siri ike ike kere igbugharị ndị gị na ngwaahịa gị ma n'otu mgbugharị ahụ na-egbochi ikekele onye iro gị, igbugharị ndị ya na ngwaahịa ya."
+      },
+      {
+        "file": "7704139283703862949.wav",
+        "wer": 0.375,
+        "ref": "n oge afo ndi 1920 agwa kachasi di ebe nile n etiti ndi mba di iche iche bu nke icho udo na nnoro onwe",
+        "hyp": "n'oge afọ ndị naijirịa n'agwa kachasịn debanile n'etiti ndị mba dị iche iche bụ nke iche ọdụ na nnọrọ nwe."
+      },
+      {
+        "file": "8933448886821877270.wav",
+        "wer": 0.0833,
+        "ref": "n oge afo ndi 1920 agwa kachasi di ebe nile n etiti ndi mba di iche iche bu nke icho udo na nnoro onwe",
+        "hyp": "n'oge afọ n'1920, agwa kachasị dị ebe niile n'etiti ndị mba dị iche iche bụ nke ịchọ udo na nnọrọ onwe."
+      },
+      {
+        "file": "17372591806654483920.wav",
+        "wer": 0.125,
+        "ref": "n oge afo ndi 1920 agwa kachasi di ebe nile n etiti ndi mba di iche iche bu nke icho udo na nnoro onwe",
+        "hyp": "n'oge afọ ndị 1920, agwa kachasị dị ebe niile n'etiti ndị mba dị iche iche bụ nke ịchụ obodo na nnọrọ onwe."
+      },
+      {
+        "file": "4946747952492164411.wav",
+        "wer": 0.4783,
+        "ref": "o kwughi oke a ga akwu kama o si na a ga ele anya na nruputa aku na uba china wee kwuo ugwo",
+        "hyp": "okwu gị oké aga akụ! kama ọ si na aga eli anya na rupụta akụ n'ụba china wee kwuo ugwu."
+      },
+      {
+        "file": "11529369080647267666.wav",
+        "wer": 0.3478,
+        "ref": "o kwughi oke a ga akwu kama o si na a ga ele anya na nruputa aku na uba china wee kwuo ugwo",
+        "hyp": "okuhie oké ga-akụ kama o si na a ga-ele anya na nruputa akụ n'ụba chaina nwe kwuo ọgụ."
+      },
+      {
+        "file": "8726045481781372704.wav",
+        "wer": 0.5217,
+        "ref": "o kwughi oke a ga akwu kama o si na a ga ele anya na nruputa aku na uba china wee kwuo ugwo",
+        "hyp": "okwu yoke ga-awụ ka m osi na ọ ga-ele anya na nrupo daakụ n'ụba china wee kwụọ ụgwọ."
+      },
+      {
+        "file": "17511919542667731934.wav",
+        "wer": 0.4783,
+        "ref": "o wakpokwara ihe o bula banyere n ime mmiri ahu obuna nnukwu dainosoo di ka t rex abughi atu n ebe o no",
+        "hyp": "ọwụwa kpọkwaara ihe ọ bụla gbanyere n'ime nri ahụ ọ bụla nri kwụrụ dị nkwụsọ dị ka t-rex abụghị otu n'ebe ọ nọ."
+      }
+    ]
+  },
+  "pcm": {
+    "skipped": true,
+    "reason": "No Pidgin config in FLEURS or Common Voice; the -l pcm route is backed by NCAIR1/NigerianAccentedEnglish and must be validated with real recorded Pidgin voice notes."
+  }
+}

@@ -1,4 +1,4 @@
-# sabi-books
+# Veyra
 
 A WhatsApp voice-note bookkeeper for Nigerian market traders.
 
@@ -43,21 +43,21 @@ from app.asr import transcribe
 text = transcribe("voice_note.ogg", language="ha")      # Hausa
 text = transcribe("voice_note.ogg", language="ig")      # Igbo
 text = transcribe("voice_note.ogg", language="yo")      # Yoruba
-text = transcribe("voice_note.ogg", language="pcm")     # Pidgin / Nigerian English
-text = transcribe("voice_note.ogg", language="Pidgin")  # aliases also work
-text = transcribe("voice_note.ogg", language="en")      # English fallback
+text = transcribe("voice_note.ogg", language="en")      # Nigerian English (Accented)
+text = transcribe("voice_note.ogg", language="pcm")     # Pidgin (experimental, untested)
+text = transcribe("voice_note.ogg", language="Naija")   # aliases also work
 ```
 
 Supported languages (add more by adding one entry to `LANGUAGE_MODEL_CONFIG`
 in [asr.py](app/asr.py)):
 
-| Code    | Name                               | Model repo                       |
-|---------|------------------------------------|----------------------------------|
-| `ha`    | Hausa                              | `NCAIR1/Hausa-ASR`               |
-| `ig`    | Igbo                               | `NCAIR1/Igbo-ASR`                |
-| `yo`    | Yoruba                             | `NCAIR1/Yoruba-ASR`              |
-| `pcm`   | Pidgin (Nigerian Accented English) | `NCAIR1/NigerianAccentedEnglish` |
-| `en`    | Nigerian English (Accented)        | `NCAIR1/NigerianAccentedEnglish` |
+| Code    | Name                               | Model repo                       | Status                 |
+|---------|------------------------------------|----------------------------------|------------------------|
+| `ha`    | Hausa                              | `NCAIR1/Hausa-ASR`               | supported              |
+| `ig`    | Igbo                               | `NCAIR1/Igbo-ASR`                | supported              |
+| `yo`    | Yoruba                             | `NCAIR1/Yoruba-ASR`              | supported              |
+| `en`    | Nigerian English (Accented)        | `NCAIR1/NigerianAccentedEnglish` | supported              |
+| `pcm`   | Pidgin (Nigerian Accented English) | `NCAIR1/NigerianAccentedEnglish` | experimental, untested |
 
 All 5 entries above point to official **N-ATLaS** / NCAIR1 / Awarri checkpoints on
 Hugging Face — there is intentionally no generic `openai/whisper-small` fallback,
@@ -69,14 +69,17 @@ Notes on the `pcm` + `en` rows: NCAIR1 don't yet publish standalone
 **NigerianAccentedEnglish** Whisper-Small fine-tune is trained on speakers
 across Nigeria's 6 geopolitical zones, with Nigerian English conventions
 and Pidgin phrases in the training set (per its model card), so it's the
-best official N-ATLaS match.  If Awarri/NCAIR later releases a dedicated
+best official N-ATLaS match.  `pcm` therefore **routes to the same model
+as `en`** and is marked **experimental, untested**:
+`app.asr.language_notice("pcm")` returns the warning both CLI scripts
+print before running.  If Awarri/NCAIR later releases a dedicated
 `NCAIR1/Pidgin-ASR` or `NCAIR1/English-ASR`, swap only the `model` string
 for the relevant code — everything else stays the same.
 
 Accepted `language=` aliases (case-insensitive):
-- `yo`, `Yoruba`
-- `pcm`, `Pidgin`, `Naija`, `Nigerian Pidgin`, `Nigerian English`, `en-ng`
-- `ha`/`Hausa`, `ig`/`Igbo`, `en`/`English`
+- `ha`/`Hausa`, `ig`/`Igbo`, `yo`/`Yoruba`
+- `en`/`English`, `Nigerian English`, `en-ng`
+- `pcm`, `Pidgin`, `Naija`, `Nigerian Pidgin` (experimental, untested)
 
 The function follows the **exact** "Basic Usage" snippet on each model
 card: load via `transformers.pipeline("automatic-speech-recognition",
@@ -126,9 +129,11 @@ you have an NVIDIA GPU and want CUDA acceleration, remove the
 
 ### 3. (Optional) Hugging Face auth
 
-The NCAIR1 models are public, so no token is required for download.  If
-you hit rate limits, set `HF_TOKEN` in your shell or run
-`huggingface-cli login`.
+The NCAIR1 models are public, so no token is required for download.  Some
+cards (e.g. `NCAIR1/Yoruba-ASR`) ask you to accept conditions before the
+files unlock — if a download is refused, run `huggingface-cli login` and
+accept the terms on the model page.  If you hit rate limits, set
+`HF_TOKEN` in your shell.
 
 ## Running tests
 

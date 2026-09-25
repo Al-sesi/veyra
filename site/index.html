@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veyra — Talk to your money</title>
+  <meta name="description" content="Veyra is a WhatsApp voice-note bookkeeper for Nigerian market traders. Speak in Yorùbá, Hausa, Igbo or English — Veyra logs sales, expenses and debts, and sends a weekly profit summary." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230C3B2E'/%3E%3Cpath d='M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6' stroke='%23F0B93C' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+
+  <!-- ======================= Header ======================= -->
+  <header class="site-header" id="siteHeader">
+    <div class="container header-inner">
+      <a class="wordmark" href="#top" aria-label="Veyra home">
+        <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#0C3B2E"/>
+          <path d="M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6" stroke="#F0B93C" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+        <span class="wordmark-text">Veyra</span>
+      </a>
+      <nav class="header-nav" aria-label="Primary">
+        <a href="#how">How it works</a>
+        <a href="#languages">Languages</a>
+        <a href="#demo-teaser">Demo</a>
+      </nav>
+      <a class="btn btn-small btn-primary" href="/demo">Try the live demo</a>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- ======================= 1. Hero ======================= -->
+    <section class="hero">
+      <div class="hero-glow" aria-hidden="true"></div>
+      <div class="container hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow reveal">Built for Nigeria&rsquo;s markets</p>
+          <h1 class="hero-title reveal">Talk to your<br />money<span class="gold-dot">.</span></h1>
+          <p class="hero-sub reveal">
+            Send a WhatsApp voice note in Yorùbá, Hausa, Igbo or English — say what you
+            sold, what you spent, and who owes you. Veyra writes it down, answers back,
+            and sends your profit every week.
+          </p>
+          <div class="hero-ctas reveal">
+            <a class="btn btn-primary" href="/demo">Try the live demo</a>
+            <!-- TODO(placeholder): replace href="#" with your wa.me link, e.g. https://wa.me/234XXXXXXXXXX -->
+            <a class="btn btn-whatsapp" href="#" data-whatsapp-placeholder>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.04 2a9.9 9.9 0 0 0-8.4 15.2L2 22l4.9-1.6A9.9 9.9 0 1 0 12.04 2Zm5.8 14.1c-.24.68-1.4 1.3-1.95 1.35-.5.05-1.13.24-3.8-.8-3.2-1.26-5.25-4.55-5.4-4.76-.16-.21-1.3-1.73-1.3-3.3 0-1.57.82-2.34 1.11-2.66.29-.32.64-.4.85-.4h.61c.2 0 .46-.07.71.55.26.64.87 2.2.95 2.36.08.16.13.35.02.56-.1.21-.16.34-.31.53-.16.19-.33.42-.47.56-.16.15-.32.32-.14.63.18.32.8 1.3 1.71 2.12 1.18 1.05 2.17 1.37 2.48 1.53.31.15.5.13.68-.08.19-.21.79-.9.99-1.22.21-.31.42-.26.7-.15.29.1 1.83.86 2.14 1.02.32.16.53.24.6.37.08.14.08.79-.16 1.57Z"/></svg>
+              Chat on WhatsApp
+            </a>
+          </div>
+          <p class="hero-note reveal">No app to install. No forms. Just your voice.</p>
+        </div>
+
+        <div class="hero-art reveal" aria-hidden="true">
+          <div class="hero-wave">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="float-card float-card-a">
+            <span class="float-card-label">Sale logged</span>
+            <strong>Rice &middot; ₦45,000</strong>
+          </div>
+          <div class="float-card float-card-b">
+            <span class="float-card-label">Debt tracked</span>
+            <strong>Mama Ngozi owes ₦5,000</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= 2. Problem / stats ======================= -->
+    <section class="section problem">
+      <div class="container">
+        <p class="eyebrow reveal">The problem</p>
+        <h2 class="section-title reveal">Great traders. Invisible books.</h2>
+        <p class="section-sub reveal">
+          Nigeria&rsquo;s markets run on trust, memory and voice. That works — until it doesn&rsquo;t.
+        </p>
+        <div class="stat-grid">
+          <article class="stat-card reveal">
+            <span class="stat-number"><span class="counter" data-target="40" data-suffix="M">0</span></span>
+            <h3>Businesses, one notebook — or none</h3>
+            <p>Nigeria has roughly 40 million MSMEs (SMEDAN/NBS). Most keep their books in their head, on loose paper, or not at all.</p>
+          </article>
+          <article class="stat-card reveal">
+            <span class="stat-number"><span class="counter" data-target="26" data-suffix="%">0</span></span>
+            <h3>Formally excluded — and even the rest lack records</h3>
+            <p>26% of Nigerian adults are outside the formal financial system (EFInA 2023). And without books, even banked traders can&rsquo;t prove a loan case.</p>
+          </article>
+          <article class="stat-card reveal">
+            <span class="stat-number"><span class="counter" data-target="0" data-prefix="₦">₦0</span></span>
+            <h3>The value of a forgotten debt</h3>
+            <p>Market credit keeps trade moving — but &ldquo;who owes me?&rdquo; should never be a guessing game at the end of the week.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= 3. How it works ======================= -->
+    <section class="section how" id="how">
+      <div class="container">
+        <p class="eyebrow reveal">How it works</p>
+        <h2 class="section-title reveal">From voice note to your book,<br />in seconds.</h2>
+        <ol class="steps">
+          <li class="step reveal">
+            <div class="step-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-4a3.5 3.5 0 0 0-7 0v4A3.5 3.5 0 0 0 12 15Zm6.5-3.5a6.5 6.5 0 0 1-13 0M12 18v3.5M8.5 21.5h7"/></svg>
+            </div>
+            <h3>Speak your trade</h3>
+            <p>Send a WhatsApp voice note. Say what you sold, what you spent, or who owes you.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+            </div>
+            <h3>Veyra listens</h3>
+            <p>Veyra hears your voice and writes it down — in your language, even with market noise.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M5 4h11a2 2 0 0 1 2 2v14a2 2 0 0 0 2-2V8M5 4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H5Zm3 5h5M8 12h5M8 15h3"/></svg>
+            </div>
+            <h3>It&rsquo;s in the book</h3>
+            <p>Your sale is saved right away. Made a mistake? Just say &ldquo;no, it was ₦4,000&rdquo; and Veyra fixes it.</p>
+          </li>
+          <li class="step reveal">
+            <div class="step-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+            </div>
+            <h3>Know your week</h3>
+            <p>Every week, Veyra sends your profit and who still owes you — right in the same chat.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ======================= 4. Live demo teaser ======================= -->
+    <section class="section demo-teaser" id="demo-teaser">
+      <div class="container demo-inner">
+        <div class="demo-copy">
+          <p class="eyebrow light reveal">See it happen</p>
+          <h2 class="section-title reveal">A bookkeeper that lives<br />in your chat.</h2>
+          <p class="section-sub light reveal">
+            This is what a trader&rsquo;s week looks like with Veyra — no app, no spreadsheet,
+            just the WhatsApp they already use.
+          </p>
+          <a class="btn btn-gold reveal" href="/demo">Try the live demo</a>
+        </div>
+
+        <div class="phone reveal" aria-label="Mockup of a WhatsApp conversation with Veyra">
+          <div class="phone-notch" aria-hidden="true"></div>
+          <div class="phone-header">
+            <span class="phone-avatar" aria-hidden="true">
+              <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0C3B2E"/><path d="M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6" stroke="#F0B93C" stroke-width="2.6" stroke-linecap="round"/></svg>
+            </span>
+            <div class="phone-header-text">
+              <strong>Veyra</strong>
+              <span>online</span>
+            </div>
+          </div>
+          <div class="chat">
+            <div class="bubble bubble-out">
+              <div class="vn">
+                <span class="vn-play" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path fill="currentColor" d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+                </span>
+                <span class="vn-wave" aria-hidden="true">
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                  <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                </span>
+                <span class="vn-meta">0:07</span>
+              </div>
+              <span class="bubble-tag">Yorùbá &middot; voice note</span>
+            </div>
+            <div class="bubble bubble-in">
+              Recorded 4 entries: Rice ₦45,000 &middot; Mọto ₦2,000 &middot; Chinchin ₦5,000 &middot; Ounjẹ ₦4,000.
+              <span class="bubble-time">09:41</span>
+            </div>
+            <div class="bubble bubble-in bubble-card">
+              <strong>This week&rsquo;s summary</strong>
+              <div class="mini-ledger">
+                <div><span>Total sales</span><b>₦182,500</b></div>
+                <div><span>Total expenses</span><b>₦96,000</b></div>
+                <div class="profit"><span>Profit</span><b>₦86,500</b></div>
+                <div><span>Owed to you</span><b>₦17,500</b></div>
+              </div>
+              <span class="bubble-time">Sun 18:00</span>
+            </div>
+            <div class="bubble bubble-in bubble-typing" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= 5. Languages ======================= -->
+    <section class="section languages" id="languages">
+      <div class="container">
+        <p class="eyebrow reveal">Languages</p>
+        <h2 class="section-title reveal">Speaks the market&rsquo;s languages.<br />Built to grow.</h2>
+        <p class="section-sub reveal">
+          Tuned and measured on real Nigerian speech — not borrowed models doing their best.
+        </p>
+        <div class="lang-grid">
+          <article class="lang-card reveal">
+            <h3>Yorùbá</h3>
+            <p>Sales, expenses, debts &amp; corrections — by voice.</p>
+          </article>
+          <article class="lang-card reveal">
+            <h3>Hausa</h3>
+            <p>Sales, expenses, debts &amp; corrections — by voice.</p>
+          </article>
+          <article class="lang-card reveal">
+            <h3>Igbo</h3>
+            <p>Sales, expenses, debts &amp; corrections — by voice.</p>
+          </article>
+          <article class="lang-card reveal">
+            <h3>English</h3>
+            <p>Nigerian-accented English, understood natively.</p>
+          </article>
+          <article class="lang-card lang-card-soon reveal">
+            <h3>Nigerian Pidgin</h3>
+            <p>Experimental — improving with every real voice note it hears.</p>
+            <span class="lang-badge lang-badge-beta">Beta</span>
+          </article>
+          <article class="lang-card lang-card-grow reveal">
+            <h3>+ Your language</h3>
+            <p>Adding a new language is a configuration change, not a rebuild. Ebira, Tiv, Kanuri, Ibibio — the roadmap is open.</p>
+            <span class="lang-badge lang-badge-gold">Built to grow</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= Final CTA ======================= -->
+    <section class="section final-cta">
+      <div class="container final-cta-inner reveal">
+        <h2>Your business already has a voice.<br /><span class="gold-text">Give it a ledger.</span></h2>
+        <div class="hero-ctas">
+          <a class="btn btn-gold" href="/demo">Try the live demo</a>
+          <!-- TODO(placeholder): replace href="#" with your wa.me link -->
+          <a class="btn btn-outline-light" href="#" data-whatsapp-placeholder>Chat on WhatsApp</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================= Footer ======================= -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <a class="wordmark wordmark-light" href="#top" aria-label="Veyra home">
+        <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#F0B93C"/>
+          <path d="M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6" stroke="#0C3B2E" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+        <span class="wordmark-text">Veyra</span>
+      </a>
+      <nav class="footer-nav" aria-label="Footer">
+        <a href="/demo">Live demo</a>
+        <!-- TODO(placeholder): replace href="#" with your wa.me link -->
+        <a href="#" data-whatsapp-placeholder>WhatsApp</a>
+        <a href="#how">How it works</a>
+      </nav>
+      <p class="footer-note">All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>

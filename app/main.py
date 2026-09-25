@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.db import DEFAULT_DB_PATH, init_db
@@ -35,6 +36,18 @@ from app.pipeline import process_voice_note
 # startup exactly once per process (so DB is initialised both under `uvicorn`
 # and in the TestClient used by unit tests).
 app = FastAPI(title="Veyra", version="0.1.0")
+
+# The static demo site (site/, served by `python -m http.server 8123`) calls
+# these endpoints from the browser; without CORS the browser blocks the calls.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:8123",
+        "http://localhost:8123",
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")

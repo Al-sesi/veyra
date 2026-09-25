@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Veyra — Live demo</title>
+  <meta name="description" content="Try Veyra live: record or upload a voice note in Yorùbá, Hausa, Igbo or English and watch it become ledger entries, replies and summaries." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="demo.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230C3B2E'/%3E%3Cpath d='M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6' stroke='%23F0B93C' stroke-width='2.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body class="demo-body">
+
+  <header class="site-header demo-header">
+    <div class="container header-inner">
+      <a class="wordmark" href="/" aria-label="Veyra home">
+        <svg class="wordmark-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="8" fill="#0C3B2E"/>
+          <path d="M7 12v8M12 9v14M17 12v8M22 9v14M25 13v6" stroke="#F0B93C" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
+        <span class="wordmark-text">Veyra</span>
+      </a>
+      <span class="demo-tag">Live demo</span>
+      <nav class="header-nav" aria-label="Primary">
+        <a href="/">Back to site</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="demo-main container">
+
+    <!-- ======================= Chat / input ======================= -->
+    <section class="chat-column" aria-label="Voice note conversation">
+      <div class="chat-card">
+        <div class="chat-head">
+          <div>
+            <h1>Talk to Veyra</h1>
+            <p id="apiStatus" class="chat-status">Checking connection…</p>
+          </div>
+          <button id="resetBookBtn" class="btn btn-ghost btn-small" type="button" title="Start a fresh book in this browser">New book</button>
+        </div>
+
+        <div id="chatLog" class="chat-log" aria-live="polite">
+          <div class="bubble bubble-veyra">
+            <p class="bubble-name">Veyra</p>
+            <p>Sàlàm! Record a voice note or try a sample below. Say things like
+            “I sold 5 bags of rice for ₦30,000” or “Bala owes me ₦2,000” —
+            in Yorùbá, Hausa, Igbo or English.</p>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="lang-row" role="radiogroup" aria-label="Language">
+            <button class="lang-pill is-active" type="button" data-lang="yo" role="radio" aria-checked="true">Yorùbá</button>
+            <button class="lang-pill" type="button" data-lang="ha" role="radio" aria-checked="false">Hausa</button>
+            <button class="lang-pill" type="button" data-lang="ig" role="radio" aria-checked="false">Igbo</button>
+            <button class="lang-pill" type="button" data-lang="en" role="radio" aria-checked="false">English</button>
+            <button class="lang-pill" type="button" data-lang="pcm" role="radio" aria-checked="false">Pidgin <span class="pill-beta">Beta</span></button>
+          </div>
+
+          <div class="record-row">
+            <button id="micBtn" class="mic-btn" type="button" aria-label="Record a voice note">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+            </button>
+            <div class="record-side">
+              <p id="recordHint" class="record-hint">Tap the mic and speak</p>
+              <div class="sample-row">
+                <span class="sample-label">Or try a sample:</span>
+                <button class="sample-btn" type="button" data-sample="samples/yoruba-1.ogg" data-name="yoruba-sample-1.ogg">Yorùbá 1</button>
+                <button class="sample-btn" type="button" data-sample="samples/yoruba-2.ogg" data-name="yoruba-sample-2.ogg">Yorùbá 2</button>
+                <button class="sample-btn" type="button" data-sample="samples/yoruba-3.ogg" data-name="yoruba-sample-3.ogg">Yorùbá 3</button>
+                <label class="sample-btn sample-upload">
+                  Upload
+                  <input id="fileInput" type="file" accept="audio/*" hidden />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div id="pendingBar" class="pending-bar" hidden>
+            <span id="pendingName"></span>
+            <audio id="pendingPlayer" controls hidden></audio>
+            <button id="sendBtn" class="btn btn-primary btn-small" type="button">Send to Veyra</button>
+            <button id="discardBtn" class="btn btn-ghost btn-small" type="button">Discard</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================= Your book ======================= -->
+    <aside class="book-column" aria-label="Your book">
+      <div class="book-card">
+        <div class="book-head">
+          <h2>Your book</h2>
+          <p id="bookOwner" class="book-owner"></p>
+        </div>
+
+        <div id="bookEmpty" class="book-empty">
+          <p>Your ledger lives here. Send your first voice note to start it — it stays in this browser.</p>
+        </div>
+
+        <div id="bookContent" hidden>
+          <section class="book-section">
+            <h3>This week</h3>
+            <div class="book-totals" id="bookTotals"></div>
+          </section>
+
+          <section class="book-section">
+            <h3>Open debts</h3>
+            <ul class="book-list" id="bookDebts"></ul>
+          </section>
+
+          <section class="book-section">
+            <h3>Recent entries</h3>
+            <ul class="book-list" id="bookEntries"></ul>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <footer class="demo-footer">
+    <div class="container">
+      <p>All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="demo.js"></script>
+</body>
+</html>

@@ -32,7 +32,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.db import DEFAULT_DB_PATH, init_db, lookup_user_by_phone
 from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summary, list_entries, list_open_debts
-from app.pipeline import process_voice_note
 
 
 def _parse_extra_origins() -> list[str]:
@@ -136,6 +135,13 @@ async def voice_note(
     user_id: Optional[str] = Form(None),
 ):
     """Upload an audio file, get transcript + entries + 7-day summary."""
+    try:
+        from app.pipeline import process_voice_note
+    except Exception as exc:  # pragma: no cover - environment dependent
+        raise HTTPException(
+            status_code=503,
+            detail=f"Voice-note ASR pipeline is not available in this deployment ({exc.__class__.__name__}: {exc}). Use the text-only endpoints or deploy with ASR dependencies.",
+        ) from exc
     lang = _required_form(language, field="language")
     uid = _safe_int_form(user_id, field="user_id")
 

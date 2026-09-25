@@ -1,3 +1,20 @@
+---
+title: Veyra API
+emoji: 🇳🇬
+colorFrom: green
+colorTo: teal
+sdk: docker
+app_port: 7860
+license: mit
+tags:
+  - fastapi
+  - uvicorn
+  - whisper
+  - nigerian-languages
+  - asr
+  - bookkeeping
+---
+
 # Veyra
 
 A WhatsApp voice-note bookkeeper for Nigerian market traders.

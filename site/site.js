@@ -1,9 +1,8 @@
 /* Veyra — landing page interactions.
    Vanilla JS, no dependencies:
    1. Scroll-reveal via IntersectionObserver
-   2. Animated stat counters
-   3. Sticky header state
-   4. Guard the WhatsApp placeholder links until a real wa.me URL is set
+   2. Sticky header state
+   3. Guard the WhatsApp placeholder links until a real wa.me URL is set
 */
 (function () {
   "use strict";
@@ -27,47 +26,6 @@
       { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
     );
     revealEls.forEach(function (el) { revealObserver.observe(el); });
-  }
-
-  /* ---------- 2. Stat counters ---------- */
-  function animateCounter(el) {
-    var target = parseInt(el.getAttribute("data-target"), 10);
-    var prefix = el.getAttribute("data-prefix") || "";
-    var suffix = el.getAttribute("data-suffix") || "";
-    var duration = 1400;
-    var start = null;
-
-    function frame(now) {
-      if (start === null) start = now;
-      var progress = Math.min((now - start) / duration, 1);
-      var eased = 1 - Math.pow(1 - progress, 3); /* ease-out cubic */
-      el.textContent = prefix + Math.round(target * eased) + suffix;
-      if (progress < 1) requestAnimationFrame(frame);
-    }
-
-    if (prefersReduced) {
-      el.textContent = prefix + target + suffix;
-    } else {
-      requestAnimationFrame(frame);
-    }
-  }
-
-  var counters = document.querySelectorAll(".counter");
-  if ("IntersectionObserver" in window) {
-    var counterObserver = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (entry) {
-          if (entry.isIntersecting) {
-            animateCounter(entry.target);
-            counterObserver.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.6 }
-    );
-    counters.forEach(function (el) { counterObserver.observe(el); });
-  } else {
-    counters.forEach(animateCounter);
   }
 
   /* ---------- 3. Sticky header state ---------- */

@@ -146,9 +146,127 @@ pytest
   model download, no ffmpeg required). The pipeline, audio conversion,
   and cache behaviour are all exercised via monkeypatch.
 
+## Running locally
+
+### Backend (FastAPI, port 8000)
+
+```
+python -m uvicorn app.main:app --port 8000
+```
+
+Endpoints:
+- `GET  /` — health check
+- `POST /voice-note` — upload audio + language + optional user_id, get transcript + entries + reply
+- `GET  /ledger/{user_id}?limit=50` — recent entries
+- `GET  /ledger/{phone_number}.xlsx` — download full Excel ledger for a phone number
+- `GET  /summary/{user_id}?days=7` — totals, profit, top items + debt summary
+- `GET  /debts/{user_id}` — open (unpaid) debts
+
+### Frontend (static demo site, port 8123)
+
+```
+cd site && python -m http.server 8123
+```
+
+Then open `http://localhost:8123/demo/` in the browser. The demo page auto-detects
+the API origin (same host/port or localhost:8000 fallback) or accepts
+`?api=https://your-backend.onrender.com` to point at a deployed instance.
+
+## Deploying to Render
+
+Veyra ships with `render.yaml` (Blueprint / Infrastructure-as-Code) that
+provisions two services:
+
+| Service       | Type     | Purpose                                         |
+|---------------|----------|-------------------------------------------------|
+| `veyra-api`   | Web      | FastAPI backend (ASR, intents, ledger, SQLite)  |
+| `veyra-site`  | Static   | Marketing + live demo pages from `site/`        |
+
+### Prerequisites
+
+1. A Render account (render.com) — paid **Starter** plan or higher recommended
+   for the backend because the **Free** plan has no persistent disk (your
+   SQLite data and cached ASR models are wiped on every deploy/redeploy, and
+   cold starts re-download ~500 MB of Hugging Face weights).
+2. This repository pushed to GitHub/GitLab and connected to Render.
+
+### Option A — Deploy from Blueprint (recommended)
+
+1. In the Render dashboard go to **Blueprints → New Blueprint Instance**.
+2. Select your connected repository (the one containing `render.yaml`).
+3. On the "Environment Groups" step you will be prompted for
+   `VEYRA_CORS_ORIGINS` (marked `sync: false` so Render asks for the value).
+   Set it to the HTTPS URL of the `veyra-site` static service once you know
+   it, or to a comma-separated list of origins that may call the API, e.g.:
+   ```
+   https://veyra-site.onrender.com,https://example.com
+   ```
+   You can change this later under **Environment** for the `veyra-api`
+   service and then redeploy.
+4. Click **Apply**. Render builds both services and assigns `.onrender.com`
+   hostnames.
+
+### Option B — Manual service setup
+
+If you don't want to use Blueprints, create the two services manually from
+the Render dashboard:
+
+**Backend — Web Service (Python):**
+
+- **Branch:** `main`
+- **Root Directory:** (repo root)
+- **Runtime:** Python 3.11
+- **Build Command:** `chmod +x render-build.sh && ./render-build.sh`
+- **Start Command:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- **Plan:** Starter (minimum for persistent disk)
+- **Advanced → Health Check Path:** `/`
+- **Advanced → Auto-Deploy:** Yes
+- **Environment Variables:**
+  - `VEYRA_DB_PATH=/var/data/ledger.db`
+  - `HF_HOME=/var/data/hf-cache`
+  - `TRANSFORMERS_CACHE=/var/data/hf-cache`
+  - `VEYRA_CORS_ORIGINS=https://<your-static-site>.onrender.com`
+  - `PYTHON_VERSION=3.11.9`
+- **Disks:** Add disk named `veyra-data`, mount path `/var/data`, size 10 GB.
+
+**Frontend — Static Site:**
+
+- **Branch:** `main`
+- **Root Directory:** (repo root)
+- **Build Command:** *(leave empty)*
+- **Publish Directory:** `./site`
+
+### Using the deployed demo
+
+Once both services are live, open:
+
+```
+https://<veyra-site>.onrender.com/demo/?api=https://<veyra-api>.onrender.com
+```
+
+The `?api=` query parameter tells the demo `demo.js` client which backend to
+call (the static site has no server-side rendering, so auto-detection of the
+origin would be wrong if you deployed site + api separately).
+
+### First cold start note
+
+The **first** request to `/voice-note` in each language downloads the
+relevant N-ATLaS Whisper Small checkpoint from Hugging Face (~500 MB per
+unique model). The `HF_HOME` / `TRANSFORMERS_CACHE` env vars point at the
+persistent disk, so subsequent cold starts after a restart reuse the
+already-downloaded files.
+
+### Plan limitations & trade-offs
+
+| Render plan      | Disk       | Typical cold start | Data survives deploy? |
+|------------------|------------|--------------------|-----------------------|
+| **Free (Web)**   | none       | 30–90 s (models redownload every time) | **No** — ephemeral FS only |
+| **Starter ($7)** | 10 GB disk | 10–20 s (cached models) | **Yes** — via /var/data |
+| **Pro ($20+)**   | 10 GB+ disk| 5–15 s             | **Yes**               |
+
+For the pilot/demo phase a **Starter** web service + free Static Site is the
+minimum sensible configuration.
+
 ## Planned (not yet built)
 
 - WhatsApp voice-note ingestion (Twilio / Meta Graph API)
-- Database persistence (entries stored with timestamps + speaker)
-- FastAPI endpoints wiring `transcribe` + `parse_transcript` together
-- Frontend UI: per-trader day-books, search, summaries, debt tracking

@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: veyra-api
+    runtime: python
+    plan: starter
+    buildCommand: chmod +x render-build.sh && ./render-build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    autoDeploy: yes
+    envVars:
+      - key: VEYRA_DB_PATH
+        value: /var/data/ledger.db
+      - key: HF_HOME
+        value: /var/data/hf-cache
+      - key: TRANSFORMERS_CACHE
+        value: /var/data/hf-cache
+      - key: VEYRA_CORS_ORIGINS
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.9
+    disks:
+      - name: veyra-data
+        mountPath: /var/data
+        sizeGB: 10
+
+  - type: static
+    name: veyra-site
+    runtime: static
+    buildCommand: ""
+    publishDir: ./site
+    autoDeploy: yes
+    envVars:
+      - key: API_BASE_URL
+        fromService:
+          type: web
+          name: veyra-api
+          property: host

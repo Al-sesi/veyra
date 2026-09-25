@@ -21,13 +21,21 @@ Tables:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional
 
 
-DEFAULT_DB_PATH = Path("ledger.db").resolve()
+def _resolve_default_db_path() -> Path:
+    env_path = os.environ.get("VEYRA_DB_PATH")
+    if env_path:
+        return Path(env_path).resolve()
+    return Path("ledger.db").resolve()
+
+
+DEFAULT_DB_PATH = _resolve_default_db_path()
 
 
 def _connect(db_path: str | Path) -> sqlite3.Connection:

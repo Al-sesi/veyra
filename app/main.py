@@ -18,6 +18,7 @@ Uses sqlite3 via app.db/app.ledger/app.pipeline. No third-party DB libraries.
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -34,27 +35,38 @@ from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summar
 from app.pipeline import process_voice_note
 
 
-# Make sure tables exist before the first request hits. FastAPI calls this on
-# startup exactly once per process (so DB is initialised both under `uvicorn`
-# and in the TestClient used by unit tests).
+def _parse_extra_origins() -> list[str]:
+    raw = os.environ.get("VEYRA_CORS_ORIGINS", "")
+    if not raw:
+        return []
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+HF_HOME = os.environ.get("HF_HOME")
+if HF_HOME:
+    os.environ["HF_HOME"] = HF_HOME
+TRANSFORMERS_CACHE = os.environ.get("TRANSFORMERS_CACHE")
+if TRANSFORMERS_CACHE:
+    os.environ["TRANSFORMERS_CACHE"] = TRANSFORMERS_CACHE
+
+
 app = FastAPI(title="Veyra", version="0.1.0")
 
-# The static demo site (site/, served by `python -m http.server 8123`) calls
-# these endpoints from the browser; without CORS the browser blocks the calls.
+_local_origins = [
+    "http://127.0.0.1:8123",
+    "http://localhost:8123",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:8123",
-        "http://localhost:8123",
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3000",
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-    ],
+    allow_origins=_local_origins + _parse_extra_origins(),
     allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,7 +75,35 @@ app.add_middleware(
 
 @app.on_event("startup")
 def _ensure_db() -> None:  # pragma: no cover - trivial side effect
+    try:
+        DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    for env_key in ("HF_HOME", "TRANSFORMERS_CACHE"):
+        env_val = os.environ.get(env_key)
+        if env_val:
+            try:
+                Path(env_val).mkdir(parents=True, exist_ok=True)
+            except Exception:
+                pass
     init_db(DEFAULT_DB_PATH)
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "Veyra",
+        "version": "0.1.0",
+        "status": "ok",
+        "db_path": str(DEFAULT_DB_PATH),
+        "endpoints": [
+            "POST /voice-note",
+            "GET  /ledger/{user_id}",
+            "GET  /ledger/{phone_number}.xlsx",
+            "GET  /summary/{user_id}",
+            "GET  /debts/{user_id}",
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

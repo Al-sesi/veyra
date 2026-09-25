@@ -137,10 +137,10 @@ Verify with `ffmpeg -version` before continuing.
 ### 2. Install Python deps
 
 ```
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-full.txt
 ```
 
-`requirements.txt` pins a **CPU-only** torch wheel (small download).  If
+`requirements-full.txt` pins a **CPU-only** torch wheel (small download).  If
 you have an NVIDIA GPU and want CUDA acceleration, remove the
 `--index-url https://download.pytorch.org/whl/cpu` line before installing.
 

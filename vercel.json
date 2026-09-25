@@ -1,15 +1,5 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
   "installCommand": "pip install -r requirements-api.txt",
-  "buildCommand": null,
-  "devCommand": null,
-  "outputDirectory": null,
-  "functions": {
-    "api/handler.py": {
-      "runtime": "@vercel/python@5"
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",

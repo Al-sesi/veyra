@@ -18,20 +18,24 @@ Uses sqlite3 via app.db/app.ledger/app.pipeline. No third-party DB libraries.
 
 from __future__ import annotations
 
+import logging
 import os
+import secrets
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from io import BytesIO
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
-from app.db import DEFAULT_DB_PATH, init_db, lookup_user_by_phone
+from app.db import DEFAULT_DB_PATH, get_or_create_user, init_db, lookup_user_by_phone
 from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summary, list_entries, list_open_debts
+
+logger = logging.getLogger("veyra.webhook")
 
 
 def _parse_extra_origins() -> list[str]:
@@ -101,6 +105,8 @@ def root():
             "GET  /ledger/{phone_number}.xlsx",
             "GET  /summary/{user_id}",
             "GET  /debts/{user_id}",
+            "GET  /webhook",
+            "POST /webhook",
         ],
     }
 
@@ -230,3 +236,140 @@ def summary(user_id: int, days: int = 7):
 def debts(user_id: int):
     """Open (unpaid) debts for a user, newest first."""
     return {"user_id": user_id, "debts": list_open_debts(user_id=user_id)}
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Cloud API webhook
+# ---------------------------------------------------------------------------
+#
+# GET /webhook  — Meta's one-time verification (hub.mode/hub.verify_token/
+#                 hub.challenge query params).
+# POST /webhook — incoming WhatsApp messages (voice notes + text), routed
+#                 through the same pipeline as POST /voice-note.
+
+WHATSAPP_FALLBACK_REPLY = "Sorry, I couldn't process that, please try again."
+WHATSAPP_UNSUPPORTED_REPLY = (
+    "Sorry, I can only work with voice notes and text messages for now. "
+    "Send one of those and I'll update your books."
+)
+WHATSAPP_LANGUAGE_ASK_REPLY = (
+    "Welcome to Veyra, your voice-note bookkeeper!\n"
+    "Which language would you like to use? Reply with one of:\n"
+    "Yoruba, Hausa, Igbo, or English."
+)
+
+_LANGUAGE_DISPLAY_NAMES = {
+    "en": "English",
+    "yo": "Yorùbá",
+    "ha": "Hausa",
+    "ig": "Igbo",
+    "pcm": "Nigerian Pidgin",
+}
+
+
+def _detect_language_choice(text: Optional[str]) -> Optional[str]:
+    """Map a language-picking reply ("Yoruba", "yorùbá", "English please")
+    to an ASR language code, or None if it doesn't name a supported language."""
+    if not text:
+        return None
+    words = text.strip().lower().split()
+    if not words or len(words) > 6:
+        return None
+    from app.asr import _resolve_language  # noqa: PLC0415 (single source of language codes)
+    from app.parser import strip_diacritics  # noqa: PLC0415
+
+    folded = strip_diacritics(" ".join(words))
+    for candidate in (folded, *folded.split()):
+        try:
+            return _resolve_language(candidate)
+        except ValueError:
+            continue
+    return None
+
+
+def _handle_whatsapp_message(item: dict[str, Any]) -> None:
+    """Process one parsed WhatsApp message and reply via the Cloud API."""
+    from app import whatsapp  # noqa: PLC0415 (kept import-time cheap, patchable in tests)
+    from app.pipeline import process_voice_note  # noqa: PLC0415
+
+    phone = item["phone"]
+    try:
+        user = lookup_user_by_phone(DEFAULT_DB_PATH, phone)
+
+        # First contact: no user row yet -> ask which language to use, unless
+        # this very message is the language choice (then store it and confirm).
+        if user is None:
+            language = _detect_language_choice(item.get("text"))
+            if language is None:
+                whatsapp.send_message(phone, WHATSAPP_LANGUAGE_ASK_REPLY)
+                return
+            get_or_create_user(
+                DEFAULT_DB_PATH, None,
+                phone_or_name=phone,
+                language=language,
+            )
+            display = _LANGUAGE_DISPLAY_NAMES.get(language, language)
+            whatsapp.send_message(
+                phone,
+                f"Thank you! Veyra will use {display} for your account. "
+                "Send a voice note or a text to log a sale or expense — "
+                'for example "I sold rice 5k".',
+            )
+            return
+
+        user_id = int(user["id"])
+        language = user.get("language") or "en"
+
+        if item.get("type") in whatsapp.SUPPORTED_MEDIA_TYPES:
+            audio_bytes = whatsapp.download_media(item["media_id"])
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as tf:
+                tf.write(audio_bytes)
+                tmp_path = Path(tf.name)
+            try:
+                result = process_voice_note(
+                    str(tmp_path), language=language, user_id=user_id
+                )
+            finally:
+                tmp_path.unlink(missing_ok=True)
+        elif item.get("type") == "text":
+            result = process_voice_note(
+                "", language=language, user_id=user_id,
+                transcript=item.get("text") or "",
+            )
+        else:
+            whatsapp.send_message(phone, WHATSAPP_UNSUPPORTED_REPLY)
+            return
+
+        whatsapp.send_message(phone, result["reply_text"])
+    except Exception:
+        logger.exception("Failed to process WhatsApp message from %s", phone)
+        try:
+            whatsapp.send_message(phone, WHATSAPP_FALLBACK_REPLY)
+        except Exception:
+            logger.exception("Failed to send fallback WhatsApp reply to %s", phone)
+
+
+@app.get("/webhook")
+def webhook_verify(request: Request):
+    """Meta webhook verification: echo hub.challenge when the verify token matches."""
+    params = request.query_params
+    expected = (os.environ.get("WHATSAPP_VERIFY_TOKEN") or "").strip()
+    token = params.get("hub.verify_token") or ""
+    if (
+        params.get("hub.mode") == "subscribe"
+        and expected
+        and secrets.compare_digest(token, expected)
+    ):
+        return PlainTextResponse(params.get("hub.challenge") or "")
+    return PlainTextResponse("Webhook verification failed", status_code=403)
+
+
+@app.post("/webhook")
+def webhook_receive(payload: dict[str, Any]):
+    """Receive WhatsApp messages; always ack 200 so Meta doesn't retry."""
+    from app import whatsapp  # noqa: PLC0415
+
+    items = whatsapp.parse_webhook_payload(payload)
+    for item in items:
+        _handle_whatsapp_message(item)
+    return {"status": "ok", "messages_received": len(items)}

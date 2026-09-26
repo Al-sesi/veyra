@@ -1,0 +1,28 @@
+INFO:     Started server process [12680]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000): [winerror 10048] only one usage of each socket address (protocol/network address/port) is normally permitted
+INFINFO:     127.0.0.1:63048 - "GET /ledger/1?limit=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63064 - "GET /ledger/1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63065 - "OPTIONS /voice-note HTTP/1.1" 405 Method Not Allowed
+INFO:     Started server process [7064]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53171 - "OPTIONS /voice-note HTTP/1.1" 200 OK
+C:\Users\HomePC\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\models\whisper\generation_whisper.py:496: FutureWarning: The input name `inputs` is deprecated. Please make sure to use `input_features` instead.
+  warnings.warn(
+Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English.This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`.
+Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.43.0. You should pass an instance of `EncoderDecoderCache` instead, e.g. `past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`.
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+INFO:     127.0.0.1:53186 - "POST /voice-note HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58565 - "GET /ledger/1?limit=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63041 - "POST /voice-note HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63041 - "GET /ledger/5?limit=20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51312 - "GET /summary/5?days=7 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59755 - "GET /debts/5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63031 - "GET /ledger/1?limit=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63031 - "GET /ledger/5?limit=20 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55137 - "GET /summary/5?days=7 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55324 - "GET /debts/5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59608 - "GET / HTTP/1.1" 404 Not Found

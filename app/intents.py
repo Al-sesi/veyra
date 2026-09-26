@@ -30,6 +30,9 @@ import unicodedata
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from app.parser import find_numeric_phrases, strip_diacritics
+from app.languages.ha import HAUSA_PACK
+from app.languages.ig import IGBO_PACK
+from app.languages.yo import YORUBA_PACK
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +88,11 @@ DEBT_OWED_TO_ME_TRIGGERS = [
     # diacritic-folded, so plain-ASCII ASR output works too.
     "je mi ni", "je mi lowo", "o je mi", "won je mi",
     "ko san", "ko san fun mi", "ko tii san", "ko ti san",
-    # TODO: Hausa / Igbo triggers go here
+    # Hausa / Igbo / expanded Yoruba — from the app.languages packs. The
+    # packs are always on: code-switching inside one note is the normal case.
+    *HAUSA_PACK["debt_owed_to_me"],
+    *IGBO_PACK["debt_owed_to_me"],
+    *YORUBA_PACK["debt_owed_to_me"],
 ]
 
 DEBT_I_OWE_TRIGGERS = [
@@ -96,7 +103,10 @@ DEBT_I_OWE_TRIGGERS = [
     "i still dey owe",
     # Yoruba ("mo jẹ ọ́" / "mo jẹ ẹ́" / "mo jẹ wọ́n" = I owe you/them)
     "mo je o", "mo je e", "mo je won", "mo je yin",
-    # TODO: Hausa / Igbo triggers go here
+    # Hausa / Igbo / expanded Yoruba — from the app.languages packs.
+    *HAUSA_PACK["debt_i_owe"],
+    *IGBO_PACK["debt_i_owe"],
+    *YORUBA_PACK["debt_i_owe"],
 ]
 
 DEBT_PAID_TRIGGERS = [
@@ -108,7 +118,10 @@ DEBT_PAID_TRIGGERS = [
     # Yoruba ("ti san" = has paid). First-person forms ("mo ti san") are
     # filtered out in classify_message: the trader paying is an entry.
     "o ti san", "ti san", "san tan", "san an", "o san an",
-    # TODO: Hausa / Igbo triggers go here
+    # Hausa / Igbo / expanded Yoruba — from the app.languages packs.
+    *HAUSA_PACK["debt_paid"],
+    *IGBO_PACK["debt_paid"],
+    *YORUBA_PACK["debt_paid"],
 ]
 
 DELETE_LAST_TRIGGERS = [
@@ -121,7 +134,10 @@ DELETE_LAST_TRIGGERS = [
     "cancel am",
     # Yoruba ("yọ ... kúrò" = take it out/off, "ìparí" = the end)
     "yo kuro", "yo o kuro", "ipari",
-    # TODO: Hausa / Igbo triggers go here
+    # Hausa / Igbo / expanded Yoruba — from the app.languages packs.
+    *HAUSA_PACK["delete_last"],
+    *IGBO_PACK["delete_last"],
+    *YORUBA_PACK["delete_last"],
 ]
 
 CORRECTION_TRIGGERS = [
@@ -133,7 +149,10 @@ CORRECTION_TRIGGERS = [
     "make am", "change am", "correct am", "abeg change", "abeg make",
     # Yoruba ("kìí ṣe" = it is not, "bẹ́ẹ̀ kọ́" = not so, "àtúnṣe" = correction)
     "atunse", "mo tun se", "kii se", "kii se bee", "bee ko",
-    # TODO: Hausa / Igbo triggers go here
+    # Hausa / Igbo / expanded Yoruba — from the app.languages packs.
+    *HAUSA_PACK["correction"],
+    *IGBO_PACK["correction"],
+    *YORUBA_PACK["correction"],
 ]
 
 REQUEST_HISTORY_TRIGGERS = [
@@ -211,6 +230,14 @@ PERSON_STOPWORDS = {
     "fun", "ko", "kii", "se", "bee", "rara", "tun", "ni", "yen", "naa",
     "gan", "pa", "ipare", "atunse", "wa", "lo",
 }
+# Particles from the Hausa/Igbo/Yoruba packs (app.languages), compared
+# diacritic-folded just like the lists above.
+LANGUAGE_PERSON_STOPWORDS = (
+    HAUSA_PACK["person_stopwords"]
+    + IGBO_PACK["person_stopwords"]
+    + YORUBA_PACK["person_stopwords"]
+)
+PERSON_STOPWORDS = PERSON_STOPWORDS | set(LANGUAGE_PERSON_STOPWORDS)
 
 
 # ---------------------------------------------------------------------------

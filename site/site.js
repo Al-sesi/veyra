@@ -43,7 +43,7 @@
   document.querySelectorAll("[data-whatsapp-placeholder]").forEach(function (link) {
     link.addEventListener("click", function (event) {
       event.preventDefault();
-      window.alert("Veyra on WhatsApp is launching soon — try the live demo in the meantime.");
+      window.alert("Veyra on WhatsApp is launching soon — please check back in a little while.");
     });
   });
 })();

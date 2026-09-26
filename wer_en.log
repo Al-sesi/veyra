@@ -1,0 +1,27 @@
+FLEURS snapshot: C:\Users\HomePC\.cache\huggingface\hub\datasets--google--fleurs\snapshots\70bb2e84b976b7e960aa89f1c648e09c59f894dd
+NOTE: `pcm` (Pidgin) is reported N/A -- FLEURS/Common Voice ship no Pidgin audio; it needs real recorded Pidgin voice notes.
+
+
+=== en (en_us) ===
+C:\Users\HomePC\AppData\Local\Programs\Python\Python312\Lib\site-packages\transformers\models\whisper\generation_whisper.py:496: FutureWarning: The input name `inputs` is deprecated. Please make sure to use `input_features` instead.
+  warnings.warn(
+Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English.This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`.
+Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.43.0. You should pass an instance of `EncoderDecoderCache` instead, e.g. `past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`.
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+[en] 12741024238657315067.wav: WER=0.118 (1S 1D 0I / 17w)
+[en] 9055240296608129734.wav: WER=0.176 (1S 2D 0I / 17w)
+[en] 621925716775998155.wav: WER=0.062 (1S 0D 0I / 16w)
+[en] 10335587906469246566.wav: WER=0.062 (1S 0D 0I / 16w)
+[en] 2589557553267364799.wav: WER=0.069 (2S 0D 0I / 29w)
+[en] 17824557748066874904.wav: WER=0.069 (2S 0D 0I / 29w)
+[en] 8173060820032255320.wav: WER=0.357 (4S 1D 0I / 14w)
+[en] 15618717836108767541.wav: WER=0.214 (3S 0D 0I / 14w)
+[en] 2652155470394119415.wav: WER=0.062 (1S 0D 0I / 16w)
+[en] 14585898865749103727.wav: WER=0.062 (1S 0D 0I / 16w)
+[en] corpus WER over 10 clips (184 ref words): 0.114
+
+===== WER SUMMARY (FLEURS test, first 10 clips/lang) =====
+    en: corpus WER 0.114 (10 clips, 184 ref words)
+   pcm: N/A -- No Pidgin config in FLEURS or Common Voice; the -l pcm route is backed by NCAIR1/NigerianAccentedEnglish and must be validated with real recorded Pidgin voice notes.
+
+Full results written to C:\Users\HomePC\Documents\Qoder\2026-09-24\99452885\wer_en.json

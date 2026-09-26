@@ -2,6 +2,10 @@ import re
 import unicodedata
 from typing import List, Optional, Dict, Any, Tuple
 
+from app.languages.ha import HAUSA_PACK
+from app.languages.ig import IGBO_PACK
+from app.languages.yo import YORUBA_PACK
+
 
 # ---------------------------------------------------------------------------
 # Number parsing: convert words and shorthand into integers.
@@ -22,31 +26,24 @@ ONES_WORDS = {"one", "two", "three", "four", "five", "six", "seven", "eight", "n
 SCALE_WORDS = {"hundred", "thousand", "million"}
 
 # ---------------------------------------------------------------------------
-# Yoruba number words, stored diacritic-folded ("ẹgbẹ̀rún" -> "egberun").
-# Note the order difference: Yoruba puts the scale word BEFORE its multiplier
-# ("ẹgbẹ̀rún márùn-ún" = 1000 x 5 = 5,000) while English puts it after
-# ("five thousand" = 5 x 1000).
+# Language-pack number words (Yoruba/Hausa/Igbo), stored diacritic-folded.
+# Note the order difference vs English: these languages put the scale word
+# BEFORE its multiplier ("ẹgbẹ̀rún márùn-ún" = 1000 x 5 = 5,000,
+# "dubu biyu" = 2000) while English puts it after ("five thousand").
+# The packs are merged into ONE lookup: vocabulary is always on, because
+# code-switching within a single note is the normal case.
 # ---------------------------------------------------------------------------
-YORUBA_NUMBER_WORDS: Dict[str, int] = {
-    "okan": 1, "kan": 1,
-    "meji": 2, "eji": 2,
-    "meta": 3, "eta": 3,
-    "merin": 4, "erin": 4,
-    "marun": 5, "arun": 5,
-    "mefa": 6, "efa": 6,
-    "meje": 7, "eje": 7,
-    "mejo": 8, "ejo": 8,
-    "mesan": 9, "esan": 9,
-    "mewa": 10, "ewa": 10,
-    "ogun": 20,
-    "ogoji": 40,
-    "egberun": 1000,
-    "milionu": 1000000,
-}
+YORUBA_NUMBER_WORDS: Dict[str, int] = YORUBA_PACK["number_words"]
+HAUSA_NUMBER_WORDS: Dict[str, int] = HAUSA_PACK["number_words"]
+IGBO_NUMBER_WORDS: Dict[str, int] = IGBO_PACK["number_words"]
+
+ALL_NUMBER_WORDS: Dict[str, int] = {}
+for _number_dict in (YORUBA_NUMBER_WORDS, HAUSA_NUMBER_WORDS, IGBO_NUMBER_WORDS):
+    ALL_NUMBER_WORDS.update(_number_dict)
 
 # Short tails glued onto Yoruba number words with a hyphen, e.g. "márùn-ún"
 # (= 5) or "ọ̀kàn-ún" (= 1). They carry no numeric value of their own.
-YORUBA_NUMBER_TAILS = {"un", "an", "aa"}
+YORUBA_NUMBER_TAILS = YORUBA_PACK["number_tails"]
 
 
 def strip_diacritics(text: str) -> str:
@@ -71,8 +68,8 @@ def _lookup_number_word(word: str) -> Optional[int]:
     if w in WORD_NUMBERS:
         return WORD_NUMBERS[w]
     folded = strip_diacritics(w)
-    if folded in YORUBA_NUMBER_WORDS:
-        return YORUBA_NUMBER_WORDS[folded]
+    if folded in ALL_NUMBER_WORDS:
+        return ALL_NUMBER_WORDS[folded]
     if "-" in folded:
         head, *tails = folded.split("-")
         if tails and all(t in YORUBA_NUMBER_TAILS for t in tails):
@@ -393,11 +390,56 @@ def _contains_word(text: str, word: str) -> bool:
     return re.search(rf"\b{re.escape(word)}\b", text) is not None
 
 
+def _contains_phrase(text: str, phrase: str) -> bool:
+    """Whole-phrase match on already-folded text: the phrase must appear
+    with non-alphanumeric characters (or string edges) on both sides, so
+    "na sayi" fires but "saya" inside another word does not."""
+    if not phrase:
+        return False
+    start = text.find(phrase)
+    while start != -1:
+        end = start + len(phrase)
+        if (start == 0 or not text[start - 1].isalnum()) and (
+            end == len(text) or not text[end].isalnum()
+        ):
+            return True
+        start = text.find(phrase, start + 1)
+    return False
+
+
+# Phrase-level transaction verbs from the language packs. These packs are
+# ALWAYS applied alongside the English/Pidgin word lists above: a trader may
+# say "Na sayi rice 5k" (Hausa verb + English item) in the same breath.
+PACK_BUY_VERBS: List[str] = (
+    HAUSA_PACK["buy_verbs"] + IGBO_PACK["buy_verbs"] + YORUBA_PACK["buy_verbs"]
+)
+PACK_SALE_VERBS: List[str] = (
+    HAUSA_PACK["sale_verbs"] + IGBO_PACK["sale_verbs"] + YORUBA_PACK["sale_verbs"]
+)
+PACK_PAY_VERBS: List[str] = (
+    HAUSA_PACK["pay_verbs"] + IGBO_PACK["pay_verbs"] + YORUBA_PACK["pay_verbs"]
+)
+
+# Words stripped from item extraction: every word of every pack verb phrase
+# ("na sayi" -> "na", "sayi") plus per-pack pronouns ("m", "fun"), so the
+# English item survives in code-switched notes ("Azụrụ m rice 5k" -> "Rice").
+_PACK_VERB_STOPWORDS = {
+    word
+    for pack in (HAUSA_PACK, IGBO_PACK, YORUBA_PACK)
+    for cat in ("buy_verbs", "sale_verbs", "pay_verbs")
+    for phrase in pack[cat]
+    for word in phrase.split()
+} | set(HAUSA_PACK["pronouns"]) | set(IGBO_PACK["pronouns"]) | set(
+    YORUBA_PACK["pronouns"]
+)
+
+
 def detect_transaction_type(segment: str) -> Optional[str]:
     """
     Return "sale", "expense", or None based on keywords in the segment.
-    Handles English, common Nigerian Pidgin phrasing, and Yoruba verbs
-    ("ra" = buy, "tà" = sell), matched diacritic-insensitively.
+    Handles English, common Nigerian Pidgin phrasing, Yoruba verbs
+    ("ra" = buy, "tà" = sell), and the Hausa/Igbo/Yoruba phrase packs in
+    app.languages — all matched diacritic-insensitively.
     """
     lowered = segment.lower()
     folded = strip_diacritics(lowered)
@@ -412,6 +454,11 @@ def detect_transaction_type(segment: str) -> Optional[str]:
     expense_hits += sum(1 for w in YORUBA_EXPENSE_WORDS if _contains_word(folded, w))
     expense_hits += sum(1 for w in YORUBA_EXPENSE_ITEMS if _contains_word(folded, w))
     sale_hits += sum(1 for w in YORUBA_SALE_WORDS if _contains_word(folded, w))
+
+    # Language-pack phrase verbs: buy/pay -> expense, sale -> sale.
+    expense_hits += sum(1 for p in PACK_BUY_VERBS if _contains_phrase(folded, p))
+    expense_hits += sum(1 for p in PACK_PAY_VERBS if _contains_phrase(folded, p))
+    sale_hits += sum(1 for p in PACK_SALE_VERBS if _contains_phrase(folded, p))
 
     if expense_hits > sale_hits:
         return "expense"
@@ -501,7 +548,7 @@ def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], t
     if quantity_text:
         text = text.replace(quantity_text, " ")
 
-    stopwords = set(UNIT_WORDS) | {
+    stopwords = set(UNIT_WORDS) | _PACK_VERB_STOPWORDS | {
         "i", "me", "my", "for", "the", "a", "an", "of", "and", "or",
         "is", "was", "be", "been", "being", "am", "are",
         "sold", "sell", "sells", "selling", "don",

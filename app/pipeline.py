@@ -155,8 +155,13 @@ def process_voice_note(
     user_id: Optional[int] = None,
     *,
     db_path=None,
+    transcript: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run ASR -> classify -> route -> persist, and build the reply text.
+
+    If ``transcript`` is provided (e.g. a WhatsApp text message), the file
+    check and ASR step are skipped and the given text is routed exactly like
+    a transcription; ``audio_path`` is then ignored.
 
     Returns:
         {
@@ -169,13 +174,19 @@ def process_voice_note(
     """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
-    audio_path = str(Path(audio_path).expanduser().resolve())
-    if not Path(audio_path).is_file():
-        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+    # With a transcript override (text-message path) there is no audio file
+    # at all, so the existence check and ASR step are skipped entirely.
+    audio_name = ""
+    if transcript is None:
+        audio_path = str(Path(audio_path).expanduser().resolve())
+        if not Path(audio_path).is_file():
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+        audio_name = Path(audio_path).name
 
     notice_text = language_notice(language)
-    transcript = transcribe(audio_path, language)
-    audio_name = Path(audio_path).name
+    if transcript is None:
+        transcript = transcribe(audio_path, language)
     intent = classify_message(transcript)
 
     # ------------------------------------------------------------------

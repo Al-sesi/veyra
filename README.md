@@ -178,6 +178,7 @@ Endpoints:
 - `GET  /ledger/{phone_number}.xlsx` — download full Excel ledger for a phone number
 - `GET  /summary/{user_id}?days=7` — totals, profit, top items + debt summary
 - `GET  /debts/{user_id}` — open (unpaid) debts
+- `GET  /webhook` / `POST /webhook` — WhatsApp Cloud API verification + incoming messages (see "WhatsApp Setup")
 
 ### Frontend (static demo site, port 8123)
 
@@ -284,6 +285,52 @@ already-downloaded files.
 For the pilot/demo phase a **Starter** web service + free Static Site is the
 minimum sensible configuration.
 
+## WhatsApp Setup
+
+Veyra receives and answers WhatsApp messages through the **WhatsApp Cloud API**
+(Meta). Two endpoints in `app/main.py` implement the integration:
+
+- `GET /webhook` — Meta calls this once to verify the webhook (checks
+  `hub.verify_token`, echoes `hub.challenge`).
+- `POST /webhook` — receives incoming messages. Voice notes are downloaded
+  and run through `process_voice_note()`; text messages run through the same
+  pipeline with ASR skipped. Replies are sent back with the Send Message API.
+
+### 1. Environment variables
+
+| Variable                     | What it is |
+|------------------------------|------------|
+| `WHATSAPP_ACCESS_TOKEN`      | Permanent token (Meta Business Settings → System Users → token with `whatsapp_business_messaging` permission), or the temporary token from WhatsApp → API Setup while testing. **Never commit it.** |
+| `WHATSAPP_PHONE_NUMBER_ID`   | Numeric id of the phone number Veyra sends *from* — shown at the top of WhatsApp → API Setup. This is **not** the display phone number. |
+| `WHATSAPP_VERIFY_TOKEN`      | Any random string you invent (e.g. `openssl rand -hex 16`). Must match what you type into the Meta dashboard. |
+| `WHATSAPP_BUSINESS_ACCOUNT_ID` | Your WABA id. The app itself doesn't call it, but Meta's setup flow asks for it when subscribing to webhooks via the API. |
+| `WHATSAPP_GRAPH_API_VERSION` | Optional. Defaults to `v21.0`; bump when Meta deprecates a version. |
+
+Set these in the Render dashboard under the `veyra-api` service →
+**Environment** (same place as `VEYRA_DB_PATH`), then redeploy. For local
+testing, put them in your shell or a gitignored `.env` loader.
+
+### 2. Configure the webhook in Meta
+
+1. In the [Meta developer dashboard](https://developers.facebook.com/apps),
+   open your app → **WhatsApp** → **Configuration**.
+2. Under **Webhook**, click **Edit** and enter:
+   - **Callback URL:** `https://<your-veyra-api-host>/webhook`
+     (e.g. `https://veyra-api.onrender.com/webhook`)
+   - **Verify token:** the same value as `WHATSAPP_VERIFY_TOKEN`.
+3. Meta immediately calls `GET /webhook` to verify; a correct verify token
+   returns the challenge and the dashboard saves the subscription.
+4. Under **Webhook fields**, make sure **messages** is subscribed.
+
+### 3. First contact flow
+
+Traders are identified by their WhatsApp number. On a trader's **first**
+message Veyra asks which language to use (Yoruba, Hausa, Igbo, or English);
+the choice is stored on the user's profile (`users.language`) and every later
+voice note is transcribed with the matching N-ATLaS model. Anything the app
+can't handle (images, download/ASR failures) gets a friendly WhatsApp reply,
+and the real error is logged server-side.
+
 ## Planned (not yet built)
 
-- WhatsApp voice-note ingestion (Twilio / Meta Graph API)
+- Rich WhatsApp replies (buttons, ledger-link templates) beyond plain text

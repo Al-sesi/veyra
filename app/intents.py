@@ -12,6 +12,12 @@ Rule-based intent classification for trader voice notes.
   - "debt_paid"       a registered debt was settled ("Mama Ngozi don pay")
   - "request_history" trader asks for their persistent Excel ledger link
                       ("show my history", "send my records", "my report")
+  - "check_stock"     trader asks about inventory levels
+                      ("how much rice do I have", "stock check", "what's remaining")
+  - "business_insight" trader asks about business performance
+                      ("which item makes the most money", "my best seller", "what's selling slow")
+  - "expense_breakdown" trader asks about expense categories
+                      ("how much did I spend on transport", "my expenses this month")
   - "menu"            asks for the help menu or Veyra didn't understand
                       (triggers reply listing the 5 things she can do)
   - "help"            asks for FAQ-style info: what Veyra is, languages,

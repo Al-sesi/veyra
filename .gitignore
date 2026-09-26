@@ -7,3 +7,7 @@ venv/
 
 # Runtime SQLite data — never commit live trader data.
 ledger.db
+
+# Environment variables (API keys, DSNs, tokens).
+.env
+.env.local

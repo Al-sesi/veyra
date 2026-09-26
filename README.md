@@ -152,6 +152,20 @@ files unlock — if a download is refused, run `huggingface-cli login` and
 accept the terms on the model page.  If you hit rate limits, set
 `HF_TOKEN` in your shell.
 
+### 4. (Optional) Database Setup
+
+For production deployments, set up a PostgreSQL database (e.g., Supabase) and set the `DATABASE_URL` environment variable:
+
+```bash
+# Create a .env file (already in .gitignore)
+echo "DATABASE_URL=postgresql://postgres:[PASSWORD]@[PROJECT-REF].pooler.supabase.com:6543/postgres" > .env
+
+# Initialize the database schema
+python scripts/init_postgres_schema.py
+```
+
+If `DATABASE_URL` is not set, Veyra will fall back to SQLite (ledger.db) for local development and testing.
+
 ## Running tests
 
 ```
@@ -224,6 +238,21 @@ provisions two services:
 4. Click **Apply**. Render builds both services and assigns `.onrender.com`
    hostnames.
 
+### Database Setup (Required for Production)
+
+Veyra now uses PostgreSQL (via Supabase) for production deployments instead of SQLite.
+
+1. **Create a Supabase project** if you don't have one already (supabase.com)
+2. **Get your DATABASE_URL** from Supabase dashboard → Project Settings → Database
+3. **Initialize the database schema** by running:
+   ```
+   export DATABASE_URL="postgresql://postgres:[PASSWORD]@[PROJECT-REF].pooler.supabase.com:6543/postgres"
+   python scripts/init_postgres_schema.py
+   ```
+4. **Set DATABASE_URL as an environment variable** in your deployment (Render, Vercel, etc.)
+
+For local development, if DATABASE_URL is not set, Veyra will fall back to SQLite (ledger.db in the current directory).
+
 ### Option B — Manual service setup
 
 If you don't want to use Blueprints, create the two services manually from
@@ -240,12 +269,12 @@ the Render dashboard:
 - **Advanced → Health Check Path:** `/`
 - **Advanced → Auto-Deploy:** Yes
 - **Environment Variables:**
-  - `VEYRA_DB_PATH=/var/data/ledger.db`
+  - `DATABASE_URL=postgresql://postgres:[PASSWORD]@[PROJECT-REF].pooler.supabase.com:6543/postgres` (Required for production - get from Supabase dashboard)
   - `HF_HOME=/var/data/hf-cache`
   - `TRANSFORMERS_CACHE=/var/data/hf-cache`
   - `VEYRA_CORS_ORIGINS=https://<your-static-site>.onrender.com`
   - `PYTHON_VERSION=3.11.9`
-- **Disks:** Add disk named `veyra-data`, mount path `/var/data`, size 10 GB.
+- **Disks:** Add disk named `veyra-data`, mount path `/var/data`, size 10 GB (for Hugging Face model cache).
 
 **Frontend — Static Site:**
 
@@ -273,6 +302,8 @@ relevant N-ATLaS Whisper Small checkpoint from Hugging Face (~500 MB per
 unique model). The `HF_HOME` / `TRANSFORMERS_CACHE` env vars point at the
 persistent disk, so subsequent cold starts after a restart reuse the
 already-downloaded files.
+
+Note: With PostgreSQL (Supabase), your data persists across deployments without needing a persistent disk for the database itself. The disk is only needed for the Hugging Face model cache.
 
 ### Plan limitations & trade-offs
 

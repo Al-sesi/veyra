@@ -31,7 +31,7 @@ from typing import Any, Iterable, Optional
 from io import BytesIO
 from urllib.parse import quote
 
-from app.db import DEFAULT_DB_PATH, get_connection, get_or_create_user, query_one, row_to_dict
+from app.db import DEFAULT_DB_PATH, USE_POSTGRES, get_connection, get_or_create_user, query_one, row_to_dict
 
 
 DEBT_DIRECTIONS = ("owed_to_me", "i_owe")
@@ -52,19 +52,32 @@ def _require_user(db_path, user_id):
 
 
 def _last_active_entry(
-    conn: sqlite3.Connection,
+    conn,
     user_id: int,
-) -> Optional[sqlite3.Row]:
+) -> Optional:
     """The most recent active entry for a user, or None."""
-    return conn.execute(
-        """
-        SELECT * FROM entries
-        WHERE user_id = ? AND status = 'active'
-        ORDER BY created_at DESC, id DESC
-        LIMIT 1;
-        """,
-        (user_id,),
-    ).fetchone()
+    if USE_POSTGRES:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT * FROM entries
+                WHERE user_id = %s AND status = 'active'
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1;
+                """,
+                (user_id,),
+            )
+            return cur.fetchone()
+    else:
+        return conn.execute(
+            """
+            SELECT * FROM entries
+            WHERE user_id = ? AND status = 'active'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1;
+            """,
+            (user_id,),
+        ).fetchone()
 
 
 # ---------------------------------------------------------------------------
@@ -89,41 +102,81 @@ def add_entries(
     uid = _require_user(db_path, user_id)
 
     with get_connection(db_path) as conn:
-        insert_sql = """
-            INSERT INTO entries (user_id, item, quantity, amount, type,
-                             transcript, audio_file, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """
-        rows: list[tuple] = []
-        for e in entries:
-            qty = e.get("quantity")
-            rows.append(
-                (
-                    uid,
-                    str(e.get("item", "") or "").strip() or "unknown",
-                    None if qty is None else float(qty),
-                    int(e["amount"]),
-                    str(e.get("type", "sale")),
-                    transcript or "",
-                    audio_file or "",
-                    "active",
-                )
-            )
-        conn.executemany(insert_sql, rows)
-        # Pull back the inserted rows in insertion order. SQLite's
-        # last_insert_rowid() reports the id of the LAST row inserted by
-        # executemany; the batch occupies the contiguous ids before it.
-        last_id = conn.execute("SELECT last_insert_rowid() AS id;").fetchone()["id"]
-        first_id = last_id - len(rows) + 1
-        fetched = conn.execute(
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                insert_sql = """
+                    INSERT INTO entries (user_id, item, quantity, amount, type,
+                                     transcript, audio_file, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id;
+                """
+                inserted_ids = []
+                for e in entries:
+                    qty = e.get("quantity")
+                    cur.execute(
+                        insert_sql,
+                        (
+                            uid,
+                            str(e.get("item", "") or "").strip() or "unknown",
+                            None if qty is None else float(qty),
+                            int(e["amount"]),
+                            str(e.get("type", "sale")),
+                            transcript or "",
+                            audio_file or "",
+                            "active",
+                        )
+                    )
+                    inserted_ids.append(cur.fetchone()["id"])
+                
+                # Fetch the inserted rows
+                if inserted_ids:
+                    placeholders = ','.join(['%s'] * len(inserted_ids))
+                    cur.execute(
+                        f"""
+                        SELECT * FROM entries
+                        WHERE id IN ({placeholders}) AND user_id = %s
+                        ORDER BY id ASC;
+                        """,
+                        inserted_ids + [uid]
+                    )
+                    return [row_to_dict(row) for row in cur.fetchall()]
+                return []
+        else:
+            insert_sql = """
+                INSERT INTO entries (user_id, item, quantity, amount, type,
+                                 transcript, audio_file, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """
-            SELECT * FROM entries
-            WHERE id BETWEEN ? AND ? AND user_id = ?
-            ORDER BY id ASC;
-            """,
-            (first_id, last_id, uid),
-        ).fetchall()
-        return [row_to_dict(r) for r in fetched]
+            rows: list[tuple] = []
+            for e in entries:
+                qty = e.get("quantity")
+                rows.append(
+                    (
+                        uid,
+                        str(e.get("item", "") or "").strip() or "unknown",
+                        None if qty is None else float(qty),
+                        int(e["amount"]),
+                        str(e.get("type", "sale")),
+                        transcript or "",
+                        audio_file or "",
+                        "active",
+                    )
+                )
+            conn.executemany(insert_sql, rows)
+            # Pull back the inserted rows in insertion order. SQLite's
+            # last_insert_rowid() reports the id of the LAST row inserted by
+            # executemany; the batch occupies the contiguous ids before it.
+            last_id = conn.execute("SELECT last_insert_rowid() AS id;").fetchone()["id"]
+            first_id = last_id - len(rows) + 1
+            fetched = conn.execute(
+                """
+                SELECT * FROM entries
+                WHERE id BETWEEN ? AND ? AND user_id = ?
+                ORDER BY id ASC;
+                """,
+                (first_id, last_id, uid),
+            ).fetchall()
+            return [row_to_dict(r) for r in fetched]
 
 
 def list_entries(
@@ -137,16 +190,29 @@ def list_entries(
         db_path = DEFAULT_DB_PATH
     uid = _require_user(db_path, user_id)
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM entries
-            WHERE user_id = ?
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?;
-            """,
-            (uid, int(limit)),
-        ).fetchall()
-        return [row_to_dict(r) for r in rows]
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM entries
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT %s;
+                    """,
+                    (uid, int(limit)),
+                )
+                return [row_to_dict(row) for row in cur.fetchall()]
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM entries
+                WHERE user_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?;
+                """,
+                (uid, int(limit)),
+            ).fetchall()
+            return [row_to_dict(r) for r in rows]
 
 
 def correct_last_entry(
@@ -170,31 +236,62 @@ def correct_last_entry(
         old = _last_active_entry(conn, uid)
         if old is None:
             return None
-        conn.execute(
-            "UPDATE entries SET status = 'voided' WHERE id = ?;", (old["id"],)
-        )
-        cur = conn.execute(
-            """
-            INSERT INTO entries (user_id, item, quantity, amount, type,
-                                 transcript, audio_file, status,
-                                 replaces_entry_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?);
-            """,
-            (
-                uid,
-                old["item"],
-                old["quantity"],
-                int(new_amount),
-                old["type"],
-                old["transcript"],
-                old["audio_file"],
-                old["id"],
-            ),
-        )
-        new_row = conn.execute(
-            "SELECT * FROM entries WHERE id = ?;", (cur.lastrowid,)
-        ).fetchone()
-        return row_to_dict(new_row)
+        
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE entries SET status = 'voided' WHERE id = %s;", (old["id"],)
+                )
+                cur.execute(
+                    """
+                    INSERT INTO entries (user_id, item, quantity, amount, type,
+                                         transcript, audio_file, status,
+                                         replaces_entry_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s)
+                    RETURNING id;
+                    """,
+                    (
+                        uid,
+                        old["item"],
+                        old["quantity"],
+                        int(new_amount),
+                        old["type"],
+                        old["transcript"],
+                        old["audio_file"],
+                        old["id"],
+                    ),
+                )
+                new_id = cur.fetchone()["id"]
+                cur.execute(
+                    "SELECT * FROM entries WHERE id = %s;", (new_id,)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            conn.execute(
+                "UPDATE entries SET status = 'voided' WHERE id = ?;", (old["id"],)
+            )
+            cur = conn.execute(
+                """
+                INSERT INTO entries (user_id, item, quantity, amount, type,
+                                     transcript, audio_file, status,
+                                     replaces_entry_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?);
+                """,
+                (
+                    uid,
+                    old["item"],
+                    old["quantity"],
+                    int(new_amount),
+                    old["type"],
+                    old["transcript"],
+                    old["audio_file"],
+                    old["id"],
+                ),
+            )
+            new_row = conn.execute(
+                "SELECT * FROM entries WHERE id = ?;", (cur.lastrowid,)
+            ).fetchone()
+            return row_to_dict(new_row)
 
 
 def delete_last_entry(
@@ -213,13 +310,24 @@ def delete_last_entry(
         last = _last_active_entry(conn, uid)
         if last is None:
             return None
-        conn.execute(
-            "UPDATE entries SET status = 'voided' WHERE id = ?;", (last["id"],)
-        )
-        voided = conn.execute(
-            "SELECT * FROM entries WHERE id = ?;", (last["id"],)
-        ).fetchone()
-        return row_to_dict(voided)
+        
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE entries SET status = 'voided' WHERE id = %s;", (last["id"],)
+                )
+                cur.execute(
+                    "SELECT * FROM entries WHERE id = %s;", (last["id"],)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            conn.execute(
+                "UPDATE entries SET status = 'voided' WHERE id = ?;", (last["id"],)
+            )
+            voided = conn.execute(
+                "SELECT * FROM entries WHERE id = ?;", (last["id"],)
+            ).fetchone()
+            return row_to_dict(voided)
 
 
 # ---------------------------------------------------------------------------
@@ -245,17 +353,33 @@ def add_debt(
     uid = _require_user(db_path, user_id)
     name = (person or "").strip() or "Unknown"
     with get_connection(db_path) as conn:
-        cur = conn.execute(
-            """
-            INSERT INTO debts (user_id, person, amount, direction, status)
-            VALUES (?, ?, ?, ?, 'open');
-            """,
-            (uid, name, int(amount), direction),
-        )
-        row = conn.execute(
-            "SELECT * FROM debts WHERE id = ?;", (cur.lastrowid,)
-        ).fetchone()
-        return row_to_dict(row)
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO debts (user_id, person, amount, direction, status)
+                    VALUES (%s, %s, %s, %s, 'open')
+                    RETURNING id;
+                    """,
+                    (uid, name, int(amount), direction),
+                )
+                new_id = cur.fetchone()["id"]
+                cur.execute(
+                    "SELECT * FROM debts WHERE id = %s;", (new_id,)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO debts (user_id, person, amount, direction, status)
+                VALUES (?, ?, ?, ?, 'open');
+                """,
+                (uid, name, int(amount), direction),
+            )
+            row = conn.execute(
+                "SELECT * FROM debts WHERE id = ?;", (cur.lastrowid,)
+            ).fetchone()
+            return row_to_dict(row)
 
 
 def mark_debt_paid(
@@ -273,29 +397,56 @@ def mark_debt_paid(
     uid = _require_user(db_path, user_id)
     name = (person or "").strip()
     with get_connection(db_path) as conn:
-        row = conn.execute(
-            """
-            SELECT * FROM debts
-            WHERE user_id = ? AND status = 'open' AND LOWER(person) = LOWER(?)
-            ORDER BY id ASC
-            LIMIT 1;
-            """,
-            (uid, name),
-        ).fetchone()
-        if row is None:
-            return None
-        conn.execute(
-            """
-            UPDATE debts
-            SET status = 'paid', paid_at = datetime('now')
-            WHERE id = ?;
-            """,
-            (row["id"],),
-        )
-        updated = conn.execute(
-            "SELECT * FROM debts WHERE id = ?;", (row["id"],)
-        ).fetchone()
-        return row_to_dict(updated)
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM debts
+                    WHERE user_id = %s AND status = 'open' AND LOWER(person) = LOWER(%s)
+                    ORDER BY id ASC
+                    LIMIT 1;
+                    """,
+                    (uid, name),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                cur.execute(
+                    """
+                    UPDATE debts
+                    SET status = 'paid', paid_at = NOW()
+                    WHERE id = %s;
+                    """,
+                    (row["id"],),
+                )
+                cur.execute(
+                    "SELECT * FROM debts WHERE id = %s;", (row["id"],)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            row = conn.execute(
+                """
+                SELECT * FROM debts
+                WHERE user_id = ? AND status = 'open' AND LOWER(person) = LOWER(?)
+                ORDER BY id ASC
+                LIMIT 1;
+                """,
+                (uid, name),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                """
+                UPDATE debts
+                SET status = 'paid', paid_at = datetime('now')
+                WHERE id = ?;
+                """,
+                (row["id"],),
+            )
+            updated = conn.execute(
+                "SELECT * FROM debts WHERE id = ?;", (row["id"],)
+            ).fetchone()
+            return row_to_dict(updated)
 
 
 def list_open_debts(
@@ -308,15 +459,27 @@ def list_open_debts(
         db_path = DEFAULT_DB_PATH
     uid = _require_user(db_path, user_id)
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM debts
-            WHERE user_id = ? AND status = 'open'
-            ORDER BY created_at DESC, id DESC;
-            """,
-            (uid,),
-        ).fetchall()
-        return [row_to_dict(r) for r in rows]
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM debts
+                    WHERE user_id = %s AND status = 'open'
+                    ORDER BY created_at DESC, id DESC;
+                    """,
+                    (uid,),
+                )
+                return [row_to_dict(row) for row in cur.fetchall()]
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM debts
+                WHERE user_id = ? AND status = 'open'
+                ORDER BY created_at DESC, id DESC;
+                """,
+                (uid,),
+            ).fetchall()
+            return [row_to_dict(r) for r in rows]
 
 
 def get_summary(
@@ -344,67 +507,137 @@ def get_summary(
     days = max(1, int(days))
 
     with get_connection(db_path) as conn:
-        totals = conn.execute(
-            f"""
-            SELECT
-                COALESCE(SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END), 0)    AS total_sales,
-                COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expenses
-            FROM entries
-            WHERE user_id = ?
-              AND status = 'active'
-              AND datetime(created_at) >= datetime('now', ?);
-            """,
-            (uid, f"-{days} days"),
-        ).fetchone()
-        total_sales = int(totals["total_sales"])
-        total_expenses = int(totals["total_expenses"])
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                # Date function differs: PostgreSQL uses NOW() - INTERVAL vs SQLite datetime('now', '-')
+                days_interval = f"{days} days"
+                cur.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END), 0)    AS total_sales,
+                        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expenses
+                    FROM entries
+                    WHERE user_id = %s
+                      AND status = 'active'
+                      AND created_at >= NOW() - INTERVAL %s;
+                    """,
+                    (uid, days_interval),
+                )
+                totals = cur.fetchone()
+                total_sales = int(totals["total_sales"])
+                total_expenses = int(totals["total_expenses"])
 
-        debt_totals = conn.execute(
-            """
-            SELECT
-                COALESCE(SUM(CASE WHEN direction = 'owed_to_me' THEN amount ELSE 0 END), 0) AS total_owed_to_me,
-                COALESCE(SUM(CASE WHEN direction = 'i_owe'       THEN amount ELSE 0 END), 0) AS total_i_owe
-            FROM debts
-            WHERE user_id = ?
-              AND status = 'open';
-            """,
-            (uid,),
-        ).fetchone()
+                cur.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN direction = 'owed_to_me' THEN amount ELSE 0 END), 0) AS total_owed_to_me,
+                        COALESCE(SUM(CASE WHEN direction = 'i_owe'       THEN amount ELSE 0 END), 0) AS total_i_owe
+                    FROM debts
+                    WHERE user_id = %s
+                      AND status = 'open';
+                    """,
+                    (uid,),
+                )
+                debt_totals = cur.fetchone()
 
-        def _top_item(row_type: str) -> Optional[dict[str, Any]]:
-            row = conn.execute(
+                def _top_item(row_type: str) -> Optional[dict[str, Any]]:
+                    days_interval = f"{days} days"
+                    cur.execute(
+                        """
+                        SELECT item,
+                               SUM(amount)             AS total_amount,
+                               COUNT(*)                AS count
+                        FROM entries
+                        WHERE user_id = %s
+                          AND status = 'active'
+                          AND type = %s
+                          AND created_at >= NOW() - INTERVAL %s
+                        GROUP BY item
+                        ORDER BY SUM(amount) DESC, item ASC
+                        LIMIT 1;
+                        """,
+                        (uid, row_type, days_interval),
+                    )
+                    row = cur.fetchone()
+                    if row is None or row["total_amount"] is None:
+                        return None
+                    return {
+                        "item": row["item"],
+                        "total_amount": int(row["total_amount"]),
+                        "count": int(row["count"]),
+                    }
+
+                return {
+                    "total_sales": total_sales,
+                    "total_expenses": total_expenses,
+                    "profit": total_sales - total_expenses,
+                    "top_sale_item": _top_item("sale"),
+                    "top_expense_item": _top_item("expense"),
+                    "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
+                    "total_i_owe": int(debt_totals["total_i_owe"]),
+                }
+        else:
+            totals = conn.execute(
                 f"""
-                SELECT item,
-                       SUM(amount)             AS total_amount,
-                       COUNT(*)                AS count
+                SELECT
+                    COALESCE(SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END), 0)    AS total_sales,
+                    COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expenses
                 FROM entries
                 WHERE user_id = ?
                   AND status = 'active'
-                  AND type = ?
-                  AND datetime(created_at) >= datetime('now', ?)
-                GROUP BY item
-                ORDER BY SUM(amount) DESC, item ASC
-                LIMIT 1;
+                  AND datetime(created_at) >= datetime('now', ?);
                 """,
-                (uid, row_type, f"-{days} days"),
+                (uid, f"-{days} days"),
             ).fetchone()
-            if row is None or row["total_amount"] is None:
-                return None
-            return {
-                "item": row["item"],
-                "total_amount": int(row["total_amount"]),
-                "count": int(row["count"]),
-            }
+            total_sales = int(totals["total_sales"])
+            total_expenses = int(totals["total_expenses"])
 
-        return {
-            "total_sales": total_sales,
-            "total_expenses": total_expenses,
-            "profit": total_sales - total_expenses,
-            "top_sale_item": _top_item("sale"),
-            "top_expense_item": _top_item("expense"),
-            "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
-            "total_i_owe": int(debt_totals["total_i_owe"]),
-        }
+            debt_totals = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE WHEN direction = 'owed_to_me' THEN amount ELSE 0 END), 0) AS total_owed_to_me,
+                    COALESCE(SUM(CASE WHEN direction = 'i_owe'       THEN amount ELSE 0 END), 0) AS total_i_owe
+                FROM debts
+                WHERE user_id = ?
+                  AND status = 'open';
+                """,
+                (uid,),
+            ).fetchone()
+
+            def _top_item(row_type: str) -> Optional[dict[str, Any]]:
+                row = conn.execute(
+                    f"""
+                    SELECT item,
+                           SUM(amount)             AS total_amount,
+                           COUNT(*)                AS count
+                    FROM entries
+                    WHERE user_id = ?
+                      AND status = 'active'
+                      AND type = ?
+                      AND datetime(created_at) >= datetime('now', ?)
+                    GROUP BY item
+                    ORDER BY SUM(amount) DESC, item ASC
+                    LIMIT 1;
+                    """,
+                    (uid, row_type, f"-{days} days"),
+                ).fetchone()
+                if row is None or row["total_amount"] is None:
+                    return None
+                return {
+                    "item": row["item"],
+                    "total_amount": int(row["total_amount"]),
+                    "count": int(row["count"]),
+                }
+
+            return {
+                "total_sales": total_sales,
+                "total_expenses": total_expenses,
+                "profit": total_sales - total_expenses,
+                "top_sale_item": _top_item("sale"),
+                "top_expense_item": _top_item("expense"),
+                "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
+                "total_i_owe": int(debt_totals["total_i_owe"]),
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -436,15 +669,27 @@ def list_active_entries_chronological(
         db_path = DEFAULT_DB_PATH
     uid = _require_user(db_path, user_id)
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM entries
-            WHERE user_id = ? AND status = 'active'
-            ORDER BY datetime(created_at) ASC, id ASC;
-            """,
-            (uid,),
-        ).fetchall()
-    return [row_to_dict(r) for r in rows]
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM entries
+                    WHERE user_id = %s AND status = 'active'
+                    ORDER BY created_at ASC, id ASC;
+                    """,
+                    (uid,),
+                )
+                return [row_to_dict(row) for row in cur.fetchall()]
+        else:
+            rows = conn.execute(
+                """
+                SELECT * FROM entries
+                WHERE user_id = ? AND status = 'active'
+                ORDER BY datetime(created_at) ASC, id ASC;
+                """,
+                (uid,),
+            ).fetchall()
+            return [row_to_dict(r) for r in rows]
 
 
 def generate_xlsx_ledger_bytes(
@@ -539,4 +784,277 @@ def build_ledger_path(phone_or_name: str) -> str:
     """Return the URL path ``/ledger/{phone}.xlsx`` (URL-encoded safe)."""
     cleaned = (phone_or_name or "").strip()
     return f"/ledger/{quote(cleaned, safe='')}.xlsx"
+
+
+# ---------------------------------------------------------------------------
+# Insight functions
+# ---------------------------------------------------------------------------
+
+def get_stock_levels(
+    user_id: int,
+    *,
+    db_path=None,
+) -> list[dict[str, Any]]:
+    """Calculate stock levels for items with both buy and sell entries.
+    
+    For each item that has appeared in both "buy" (expense) and "sell" (sale) entries,
+    calculate: total quantity bought minus total quantity sold. Only uses entries
+    where quantity was captured (non-null). Skips items with no quantity data.
+    
+    Returns a list of dicts with keys: {item, quantity_remaining}
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                # Get items with both buy and sell entries that have quantity data
+                cur.execute("""
+                    SELECT item,
+                           COALESCE(SUM(CASE WHEN type = 'expense' THEN quantity ELSE 0 END), 0) AS total_bought,
+                           COALESCE(SUM(CASE WHEN type = 'sale' THEN quantity ELSE 0 END), 0) AS total_sold
+                    FROM entries
+                    WHERE user_id = %s
+                      AND status = 'active'
+                      AND quantity IS NOT NULL
+                    GROUP BY item
+                    HAVING SUM(CASE WHEN type = 'expense' THEN 1 ELSE 0 END) > 0
+                       AND SUM(CASE WHEN type = 'sale' THEN 1 ELSE 0 END) > 0
+                    ORDER BY item ASC;
+                """, (uid,))
+                
+                stock_levels = []
+                for row in cur.fetchall():
+                    bought = float(row["total_bought"]) if row["total_bought"] else 0
+                    sold = float(row["total_sold"]) if row["total_sold"] else 0
+                    remaining = bought - sold
+                    stock_levels.append({
+                        "item": row["item"],
+                        "quantity_remaining": round(remaining, 2)
+                    })
+                return stock_levels
+        else:
+            # SQLite version
+            rows = conn.execute("""
+                SELECT item,
+                       COALESCE(SUM(CASE WHEN type = 'expense' THEN quantity ELSE 0 END), 0) AS total_bought,
+                       COALESCE(SUM(CASE WHEN type = 'sale' THEN quantity ELSE 0 END), 0) AS total_sold
+                FROM entries
+                WHERE user_id = ?
+                  AND status = 'active'
+                  AND quantity IS NOT NULL
+                GROUP BY item
+                HAVING SUM(CASE WHEN type = 'expense' THEN 1 ELSE 0 END) > 0
+                   AND SUM(CASE WHEN type = 'sale' THEN 1 ELSE 0 END) > 0
+                ORDER BY item ASC;
+            """, (uid,)).fetchall()
+            
+            stock_levels = []
+            for row in rows:
+                bought = float(row["total_bought"]) if row["total_bought"] else 0
+                sold = float(row["total_sold"]) if row["total_sold"] else 0
+                remaining = bought - sold
+                stock_levels.append({
+                    "item": row["item"],
+                    "quantity_remaining": round(remaining, 2)
+                })
+            return stock_levels
+
+
+def get_top_items(
+    user_id: int,
+    metric: str = "profit",
+    period_days: int = 30,
+    *,
+    db_path=None,
+) -> list[dict[str, Any]]:
+    """Return items ranked by profit or transaction volume over a period.
+    
+    Args:
+        user_id: The user's ID
+        metric: "profit" (sales minus cost using average buy price) or "volume" (total transactions)
+        period_days: Number of days to look back (default 30)
+    
+    Returns a list of dicts with keys: {item, total_profit, total_volume, transaction_count}
+    Ranked in descending order by the specified metric.
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    period_days = max(1, int(period_days))
+    
+    if metric not in ("profit", "volume"):
+        raise ValueError(f"metric must be 'profit' or 'volume', got {metric!r}")
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                # Get item performance data
+                days_interval = f"{period_days} days"
+                cur.execute("""
+                    SELECT item,
+                           SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) AS total_sales,
+                           SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS total_cost,
+                           COUNT(*) AS transaction_count,
+                           SUM(amount) AS total_volume
+                    FROM entries
+                    WHERE user_id = %s
+                      AND status = 'active'
+                      AND created_at >= NOW() - INTERVAL %s
+                    GROUP BY item
+                    HAVING SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) > 0
+                    ORDER BY item ASC;
+                """, (uid, days_interval))
+                
+                items = []
+                for row in cur.fetchall():
+                    total_sales = int(row["total_sales"]) if row["total_sales"] else 0
+                    total_cost = int(row["total_cost"]) if row["total_cost"] else 0
+                    total_profit = total_sales - total_cost
+                    total_volume = int(row["total_volume"]) if row["total_volume"] else 0
+                    transaction_count = int(row["transaction_count"]) if row["transaction_count"] else 0
+                    
+                    items.append({
+                        "item": row["item"],
+                        "total_profit": total_profit,
+                        "total_volume": total_volume,
+                        "transaction_count": transaction_count
+                    })
+                
+                # Sort by the requested metric
+                if metric == "profit":
+                    items.sort(key=lambda x: x["total_profit"], reverse=True)
+                else:  # volume
+                    items.sort(key=lambda x: x["total_volume"], reverse=True)
+                
+                return items
+        else:
+            # SQLite version
+            rows = conn.execute("""
+                SELECT item,
+                       SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) AS total_sales,
+                       SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) AS total_cost,
+                       COUNT(*) AS transaction_count,
+                       SUM(amount) AS total_volume
+                FROM entries
+                WHERE user_id = ?
+                  AND status = 'active'
+                  AND datetime(created_at) >= datetime('now', ?)
+                GROUP BY item
+                HAVING SUM(CASE WHEN type = 'sale' THEN amount ELSE 0 END) > 0
+                ORDER BY item ASC;
+            """, (uid, f"-{period_days} days")).fetchall()
+            
+            items = []
+            for row in rows:
+                total_sales = int(row["total_sales"]) if row["total_sales"] else 0
+                total_cost = int(row["total_cost"]) if row["total_cost"] else 0
+                total_profit = total_sales - total_cost
+                total_volume = int(row["total_volume"]) if row["total_volume"] else 0
+                transaction_count = int(row["transaction_count"]) if row["transaction_count"] else 0
+                
+                items.append({
+                    "item": row["item"],
+                    "total_profit": total_profit,
+                    "total_volume": total_volume,
+                    "transaction_count": transaction_count
+                })
+            
+            # Sort by the requested metric
+            if metric == "profit":
+                items.sort(key=lambda x: x["total_profit"], reverse=True)
+            else:  # volume
+                items.sort(key=lambda x: x["total_volume"], reverse=True)
+            
+            return items
+
+
+def get_expense_breakdown(
+    user_id: int,
+    period_days: int = 30,
+    *,
+    db_path=None,
+) -> list[dict[str, Any]]:
+    """Group expense entries by item/category and return totals for the period.
+    
+    Args:
+        user_id: The user's ID
+        period_days: Number of days to look back (default 30)
+    
+    Returns a list of dicts with keys: {category, total_amount, entry_count}
+    Sorted by total amount in descending order.
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    period_days = max(1, int(period_days))
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                days_interval = f"{period_days} days"
+                cur.execute("""
+                    SELECT item AS category,
+                           SUM(amount) AS total_amount,
+                           COUNT(*) AS entry_count
+                    FROM entries
+                    WHERE user_id = %s
+                      AND type = 'expense'
+                      AND status = 'active'
+                      AND created_at >= NOW() - INTERVAL %s
+                    GROUP BY item
+                    ORDER BY total_amount DESC;
+                """, (uid, days_interval))
+                
+                breakdown = []
+                for row in cur.fetchall():
+                    breakdown.append({
+                        "category": row["category"],
+                        "total_amount": int(row["total_amount"]) if row["total_amount"] else 0,
+                        "entry_count": int(row["entry_count"]) if row["entry_count"] else 0
+                    })
+                return breakdown
+        else:
+            # SQLite version
+            rows = conn.execute("""
+                SELECT item AS category,
+                       SUM(amount) AS total_amount,
+                       COUNT(*) AS entry_count
+                FROM entries
+                WHERE user_id = ?
+                  AND type = 'expense'
+                  AND status = 'active'
+                  AND datetime(created_at) >= datetime('now', ?)
+                GROUP BY item
+                ORDER BY total_amount DESC;
+            """, (uid, f"-{period_days} days")).fetchall()
+            
+            breakdown = []
+            for row in rows:
+                breakdown.append({
+                    "category": row["category"],
+                    "total_amount": int(row["total_amount"]) if row["total_amount"] else 0,
+                    "entry_count": int(row["entry_count"]) if row["entry_count"] else 0
+                })
+            return breakdown
+
+
+# Stock threshold for low stock warnings (configurable)
+STOCK_THRESHOLD = 3  # Default threshold for low stock warnings
+
+
+def check_low_stock(user_id: int, item: str, *, db_path=None) -> Optional[str]:
+    """Check if an item's stock is below threshold and return a warning message.
+    
+    Returns a warning message if stock is low, None otherwise.
+    """
+    stock_levels = get_stock_levels(user_id, db_path=db_path)
+    for stock in stock_levels:
+        if stock["item"].lower() == item.lower():
+            if stock["quantity_remaining"] <= STOCK_THRESHOLD:
+                return f"You have only {stock['quantity_remaining']} {item} left."
+            break
+    return None
 

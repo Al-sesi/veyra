@@ -11,6 +11,6 @@ rm -rf /var/lib/apt/lists/*
 
 echo "Installing Python dependencies..."
 pip install --no-cache-dir --upgrade pip
-pip install --no-cache-dir -r requirements.txt
+pip install --no-cache-dir -r requirements-full.txt
 
 echo "=== Build complete ==="

@@ -193,17 +193,9 @@ def language_notice(language: str) -> Optional[str]:
     )
 
 
-def _check_ffmpeg() -> None:
-    """Ensure ffmpeg is available on PATH; raise a clear RuntimeError if not."""
-    if shutil.which("ffmpeg") is None:
-        raise RuntimeError(
-            "ffmpeg was not found on PATH. It is required to convert WhatsApp "
-            ".ogg (Opus) voice notes to 16 kHz mono WAV.\n"
-            "Install: https://ffmpeg.org/download.html  or  "
-            "`winget install Gyan.FFmpeg`  on Windows / "
-            "`brew install ffmpeg`  on macOS / "
-            "`sudo apt install ffmpeg`  on Linux."
-        )
+def _check_ffmpeg() -> bool:
+    """Check if ffmpeg is available on PATH. Returns True if available, False otherwise."""
+    return shutil.which("ffmpeg") is not None
 
 
 def _convert_to_wav_16k_mono(audio_path: str) -> str:
@@ -220,7 +212,15 @@ def _convert_to_wav_16k_mono(audio_path: str) -> str:
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    _check_ffmpeg()
+    if not _check_ffmpeg():
+        raise RuntimeError(
+            "ffmpeg was not found on PATH. It is required to convert WhatsApp "
+            ".ogg (Opus) voice notes to 16 kHz mono WAV.\n"
+            "Install: https://ffmpeg.org/download.html  or  "
+            "`winget install Gyan.FFmpeg`  on Windows / "
+            "`brew install ffmpeg`  on macOS / "
+            "`sudo apt install ffmpeg`  on Linux."
+        )
 
     tmp_fd, wav_path = tempfile.mkstemp(
         prefix=f"sabibooks_asr_{os.getpid()}_", suffix=".wav"

@@ -19,6 +19,10 @@ from pathlib import Path
 
 import pytest
 
+# Force SQLite mode for all tests by clearing DATABASE_URL before importing app modules
+os.environ["DATABASE_URL"] = ""
+os.environ["TEST_MODE"] = "1"
+
 # Make sure project root is on sys.path for `from app.asr import ...`
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:

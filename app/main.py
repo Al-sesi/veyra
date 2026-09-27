@@ -32,7 +32,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
-from app.db import DEFAULT_DB_PATH, get_or_create_user, init_db, lookup_user_by_phone
+from app.db import DEFAULT_DB_PATH, USE_POSTGRES, DATABASE_URL, get_or_create_user, init_db, lookup_user_by_phone
 from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summary, list_entries, list_open_debts
 
 logger = logging.getLogger("veyra.webhook")
@@ -89,17 +89,23 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
                 Path(env_val).mkdir(parents=True, exist_ok=True)
             except Exception:
                 pass
-    init_db(DEFAULT_DB_PATH)
+    # Initialize database - init_db handles both SQLite and PostgreSQL based on DATABASE_URL
+    init_db()
 
 
 @app.get("/")
+@app.get("/health")
 def root():
+    """Lightweight health check endpoint - returns status without loading models or heavy processing."""
     return {
         "service": "Veyra",
         "version": "0.1.0",
         "status": "ok",
-        "db_path": str(DEFAULT_DB_PATH),
+        "db_type": "PostgreSQL" if USE_POSTGRES else "SQLite",
+        "db_path": str(DEFAULT_DB_PATH) if not USE_POSTGRES else DATABASE_URL[:20] + "...",  # Partial URL for security
         "endpoints": [
+            "GET  / (health check)",
+            "GET  /health (health check)",
             "POST /voice-note",
             "GET  /ledger/{user_id}",
             "GET  /ledger/{phone_number}.xlsx",

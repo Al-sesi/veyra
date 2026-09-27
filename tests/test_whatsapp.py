@@ -12,11 +12,16 @@ Nothing here hits the network:
 
 from __future__ import annotations
 
+import os
 import importlib
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+# Force SQLite mode for all tests by clearing DATABASE_URL before importing app modules
+os.environ["DATABASE_URL"] = ""
+os.environ["TEST_MODE"] = "1"
 
 from app.db import get_or_create_user, init_db, query_rows
 from app.whatsapp import (

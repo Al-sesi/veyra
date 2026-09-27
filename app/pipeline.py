@@ -22,9 +22,12 @@ from typing import Any, Optional
 from app.asr import language_notice, transcribe
 from app.db import DEFAULT_DB_PATH
 from app.intents import (
+    BUSINESS_INSIGHT_INTENT,
+    CHECK_STOCK_INTENT,
     classify_message,
     extract_amount,
     extract_person,
+    EXPENSE_BREAKDOWN_INTENT,
     HELP_INTENT,
     MENU_INTENT,
     REQUEST_HISTORY_INTENT,
@@ -33,9 +36,13 @@ from app.ledger import (
     add_debt,
     add_entries,
     build_ledger_path,
+    check_low_stock,
     correct_last_entry,
     delete_last_entry,
+    get_expense_breakdown,
+    get_stock_levels,
     get_summary,
+    get_top_items,
     get_user_by_id,
     mark_debt_paid,
 )
@@ -313,6 +320,51 @@ def process_voice_note(
         return _response(transcript, user_id, db_path, reply, saved=True, language_notice_text=notice_text)
 
     # ------------------------------------------------------------------
+    # Check stock levels
+    # ------------------------------------------------------------------
+    if intent == CHECK_STOCK_INTENT:
+        if user_id is None:
+            return _response(transcript, None, db_path, NO_USER_REPLY, saved=False, language_notice_text=notice_text)
+        stock_levels = get_stock_levels(user_id, db_path=db_path)
+        if not stock_levels:
+            reply = "I don't have any stock information yet. Start recording what you buy and sell, and I'll track your inventory."
+        else:
+            items = [f"{s['item']}: {s['quantity_remaining']}" for s in stock_levels[:5]]  # Limit to top 5 items
+            reply = "Here's your stock level: " + ", ".join(items) + "."
+        return _response(transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text)
+
+    # ------------------------------------------------------------------
+    # Business insights
+    # ------------------------------------------------------------------
+    if intent == BUSINESS_INSIGHT_INTENT:
+        if user_id is None:
+            return _response(transcript, None, db_path, NO_USER_REPLY, saved=False, language_notice_text=notice_text)
+        top_items = get_top_items(user_id, metric="profit", period_days=30, db_path=db_path)
+        if not top_items:
+            reply = "I don't have enough data yet to tell you your best sellers. Keep recording your sales!"
+        else:
+            best = top_items[0]
+            worst = top_items[-1] if len(top_items) > 1 else None
+            reply = f"{best['item']} is your best earner this month."
+            if worst and worst['item'] != best['item']:
+                reply += f" {worst['item']} is moving slowly."
+        return _response(transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text)
+
+    # ------------------------------------------------------------------
+    # Expense breakdown
+    # ------------------------------------------------------------------
+    if intent == EXPENSE_BREAKDOWN_INTENT:
+        if user_id is None:
+            return _response(transcript, None, db_path, NO_USER_REPLY, saved=False, language_notice_text=notice_text)
+        breakdown = get_expense_breakdown(user_id, period_days=30, db_path=db_path)
+        if not breakdown:
+            reply = "I don't have any expense data for this period yet."
+        else:
+            items = [f"{b['category']}: {format_naira(b['total_amount'])}" for b in breakdown[:5]]
+            reply = "Your expenses this month: " + ". ".join(items) + "."
+        return _response(transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text)
+
+    # ------------------------------------------------------------------
     # New sale / expense (the default), or nothing understood
     # ------------------------------------------------------------------
     parsed = parse_transcript(transcript)
@@ -326,11 +378,21 @@ def process_voice_note(
         audio_file=audio_name,
         db_path=db_path,
     )
+    
+    # Check for low stock on sale entries and append warning if needed
+    reply = _entries_reply(saved_entries)
+    for entry in saved_entries:
+        if entry["type"] == "sale" and user_id is not None:
+            stock_warning = check_low_stock(user_id, entry["item"], db_path=db_path)
+            if stock_warning:  # check_low_stock returns None if no warning
+                reply += f" {stock_warning}"
+                break  # Only add one warning per message
+    
     return _response(
         transcript,
         saved_entries[0]["user_id"],
         db_path,
-        _entries_reply(saved_entries),
+        reply,
         saved_entries,
         saved=True,
         language_notice_text=notice_text,

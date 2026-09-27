@@ -52,6 +52,9 @@ INTENTS: Tuple[str, ...] = (
     "debt_i_owe",
     "debt_paid",
     "request_history",
+    "check_stock",
+    "business_insight",
+    "expense_breakdown",
     "menu",
     "help",
 )
@@ -63,6 +66,9 @@ DEBT_OWED_TO_ME_INTENT = "debt_owed_to_me"
 DEBT_I_OWE_INTENT = "debt_i_owe"
 DEBT_PAID_INTENT = "debt_paid"
 REQUEST_HISTORY_INTENT = "request_history"
+CHECK_STOCK_INTENT = "check_stock"
+BUSINESS_INSIGHT_INTENT = "business_insight"
+EXPENSE_BREAKDOWN_INTENT = "expense_breakdown"
 MENU_INTENT = "menu"
 HELP_INTENT = "help"
 
@@ -179,6 +185,46 @@ REQUEST_HISTORY_TRIGGERS = [
     # TODO: Yoruba triggers (e.g. "fihan iwe mi", "ranse iwe-akoso mi")
     # TODO: Hausa triggers (e.g. "nuna littafin tarihi na", "aiko rahoto na")
     # TODO: Igbo triggers (e.g. "gosi akwụkwọ m", "zipụta akwụkwọ ndebi m")
+]
+
+CHECK_STOCK_TRIGGERS = [
+    # English
+    "stock check", "what's remaining", "what is remaining",
+    "what do i have", "what do i have left", "inventory", "check stock",
+    "how many", "stock level", "remaining stock", "how much rice do i have",
+    # Nigerian Pidgin
+    "stock check", "wetin remain", "wetin i get",
+    "how many i get", "how many i get left", "check stock",
+    # TODO: Yoruba triggers (e.g. "kini mo ni", "ero tó ku")
+    # TODO: Hausa triggers (e.g. "ina nake da", "mene ne ke rage")
+    # TODO: Igbo triggers (e.g. "ike m nwere", "ihe fọdụrụ")
+]
+
+BUSINESS_INSIGHT_TRIGGERS = [
+    # English
+    "which item makes the most money", "my best seller", "what's selling slow",
+    "what is selling slow", "best seller", "top item", "best performing",
+    "what sells best", "what sells the most", "what's selling fast",
+    "business performance", "what makes the most money", "most profitable",
+    # Nigerian Pidgin
+    "which one dey sell pass", "wetin dey sell well", "best seller",
+    "wetin dey sell slow", "top item", "wetin make money pass",
+    # TODO: Yoruba triggers (e.g. "ẹyọkan wo n ta julo", "ohun ti n tọka si")
+    # TODO: Hausa triggers (e.g. "wane iri ake sayar da fi")
+    # TODO: Igbo triggers (e.g. "nke na-ere ihe ka mma", "ihe na-ere ngwa ngwa")
+]
+
+EXPENSE_BREAKDOWN_TRIGGERS = [
+    # English
+    "did i spend", "my expenses", "expense breakdown",
+    "spending breakdown", "what did i spend on", "where did my money go",
+    "expenses this month", "spending this month", "cost breakdown", "how much did i spend",
+    # Nigerian Pidgin
+    "i spend", "my expenses", "expense breakdown",
+    "wetin i spend on", "where my money go", "expenses this month", "how much i spend",
+    # TODO: Yoruba triggers (e.g. "elo n ṣe n ṣe", "owo mi lọ si ibi")
+    # TODO: Hausa triggers (e.g. "ina nake kashe", "inisan kuke gudana")
+    # TODO: Igbo triggers (e.g. "ego m gịrị", "ego m gara n'oge")
 ]
 
 MENU_TRIGGERS = [
@@ -325,6 +371,9 @@ def classify_message(text: str) -> str:
     Order matters:
       - `request_history` first so "show my history" is never mistaken for
         a debt/expense.
+      - `expense_breakdown` before `check_stock` to handle spending queries first
+      - `check_stock`, `business_insight` next so
+        these specific insight queries are recognized before general menu.
       - `help` next so FAQ phrases like "what is Veyra" are answered with
         the FAQ reply instead of falling into the generic menu.
       - `menu` next so "what can you do" / "menu" are recognised before
@@ -339,6 +388,12 @@ def classify_message(text: str) -> str:
     text = text or ""
     if find_trigger(text, REQUEST_HISTORY_TRIGGERS):
         return REQUEST_HISTORY_INTENT
+    if find_trigger(text, EXPENSE_BREAKDOWN_TRIGGERS):
+        return EXPENSE_BREAKDOWN_INTENT
+    if find_trigger(text, CHECK_STOCK_TRIGGERS):
+        return CHECK_STOCK_INTENT
+    if find_trigger(text, BUSINESS_INSIGHT_TRIGGERS):
+        return BUSINESS_INSIGHT_INTENT
     if find_trigger(text, HELP_TRIGGERS):
         return HELP_INTENT
     if find_trigger(text, MENU_TRIGGERS):

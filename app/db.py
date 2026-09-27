@@ -26,6 +26,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Optional, Union
 
+# Load environment variables from .env file (skip if TEST_MODE is set)
+if not os.environ.get("TEST_MODE"):
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # python-dotenv is optional
+
 # Database type detection
 DATABASE_URL = os.environ.get("DATABASE_URL")
 USE_POSTGRES = bool(DATABASE_URL)
@@ -137,7 +145,7 @@ CREATE TABLE IF NOT EXISTS users (
     id             SERIAL PRIMARY KEY,
     phone_or_name  TEXT    NOT NULL,
     language       TEXT    NOT NULL DEFAULT 'en',
-    created_at     TEXT    NOT NULL DEFAULT NOW()
+    created_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS entries (
@@ -152,7 +160,7 @@ CREATE TABLE IF NOT EXISTS entries (
     status      TEXT    NOT NULL DEFAULT 'active'
                                CHECK (status IN ('active', 'voided')),
     replaces_entry_id INTEGER REFERENCES entries(id),
-    created_at  TEXT    NOT NULL DEFAULT NOW()
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS debts (
@@ -163,8 +171,8 @@ CREATE TABLE IF NOT EXISTS debts (
     direction   TEXT    NOT NULL CHECK (direction IN ('owed_to_me', 'i_owe')),
     status      TEXT    NOT NULL DEFAULT 'open'
                                CHECK (status IN ('open', 'paid')),
-    created_at  TEXT    NOT NULL DEFAULT NOW(),
-    paid_at     TEXT
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    paid_at     TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_user_created
@@ -208,7 +216,17 @@ def _add_column_if_missing_postgres(
 
 
 def init_db(db_path: str | Path | None = None) -> None:
-    """Create tables/indexes if they don't already exist. Safe to call repeatedly."""
+    """Create tables/indexes if they don't already exist. Safe to call repeatedly.
+    
+    For PostgreSQL (DATABASE_URL set), db_path is ignored and DATABASE_URL is used.
+    For SQLite (DATABASE_URL not set), db_path defaults to DEFAULT_DB_PATH if not provided.
+    """
+    # For PostgreSQL, ignore db_path parameter and use DATABASE_URL
+    if USE_POSTGRES:
+        db_path = None
+    elif db_path is None:
+        db_path = DEFAULT_DB_PATH
+        
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             schema_sql = SCHEMA_POSTGRES

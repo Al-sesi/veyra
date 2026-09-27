@@ -75,6 +75,44 @@ from app.intents import INTENTS, classify_message, extract_amount, extract_perso
         ("wetin be Veyra", "help"),
         ("who be Veyra", "help"),
         ("na pilot?", "help"),
+        # check_stock — English
+        ("stock check", "check_stock"),
+        ("what's remaining", "check_stock"),
+        ("what is remaining", "check_stock"),
+        ("what do I have left", "check_stock"),
+        ("inventory", "check_stock"),
+        ("check stock", "check_stock"),
+        ("how many bags of rice do I have", "check_stock"),
+        # check_stock — Pidgin
+        ("wetin remain", "check_stock"),
+        ("wetin i get", "check_stock"),
+        ("how many i get left", "check_stock"),
+        # business_insight — English
+        ("which item makes the most money", "business_insight"),
+        ("my best seller", "business_insight"),
+        ("what's selling slow", "business_insight"),
+        ("what is selling slow", "business_insight"),
+        ("best seller", "business_insight"),
+        ("top item", "business_insight"),
+        ("what sells best", "business_insight"),
+        ("most profitable", "business_insight"),
+        # business_insight — Pidgin
+        ("which one dey sell pass", "business_insight"),
+        ("wetin dey sell well", "business_insight"),
+        ("wetin dey sell slow", "business_insight"),
+        ("wetin make money pass", "business_insight"),
+        # expense_breakdown — English
+        ("how much did I spend on transport", "expense_breakdown"),
+        ("my expenses this month", "expense_breakdown"),
+        ("expense breakdown", "expense_breakdown"),
+        ("what did I spend on", "expense_breakdown"),
+        ("where did my money go", "expense_breakdown"),
+        ("spending breakdown", "expense_breakdown"),
+        # expense_breakdown — Pidgin
+        ("how much i spend", "expense_breakdown"),
+        ("my expenses", "expense_breakdown"),
+        ("wetin i spend on", "expense_breakdown"),
+        ("where my money go", "expense_breakdown"),
     ],
 )
 def test_classify_message(text: str, expected: str) -> None:

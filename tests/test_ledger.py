@@ -16,8 +16,12 @@ from unittest.mock import patch
 
 import pytest
 
+# Force SQLite mode for all tests by clearing DATABASE_URL before importing app modules
+os.environ["DATABASE_URL"] = ""
+os.environ["TEST_MODE"] = "1"
+
 from app.db import init_db, query_one, query_rows
-from app.ledger import add_entries, get_summary, list_entries
+from app.ledger import add_entries, get_expense_breakdown, get_stock_levels, get_summary, get_top_items, list_entries
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +121,141 @@ def test_get_summary_empty_user_returns_zeros(tmp_db: Path, _patch_db):
 
 def test_add_entries_accepts_empty_list(tmp_db: Path, _patch_db):
     assert add_entries(1, [], "", "") == []
+
+
+# ---------------------------------------------------------------------------
+# New insight function tests
+# ---------------------------------------------------------------------------
+
+def test_get_stock_levels_calculates_remaining_quantity(tmp_db: Path, _patch_db):
+    """Test stock levels for items bought and sold multiple times."""
+    # Buy 10 bags of rice, sell 4, buy 5 more, sell 2 -> remaining: 9
+    add_entries(1, [
+        {"item": "Rice", "quantity": 10, "amount": 50000, "type": "expense"},
+        {"item": "Rice", "quantity": 4, "amount": 25000, "type": "sale"},
+        {"item": "Rice", "quantity": 5, "amount": 30000, "type": "expense"},
+        {"item": "Rice", "quantity": 2, "amount": 15000, "type": "sale"},
+    ], "rice transactions", "")
+    
+    # Buy 3 bags of beans, sell 1 -> remaining: 2
+    add_entries(1, [
+        {"item": "Beans", "quantity": 3, "amount": 15000, "type": "expense"},
+        {"item": "Beans", "quantity": 1, "amount": 6000, "type": "sale"},
+    ], "beans transactions", "")
+    
+    # Sale with no quantity should be ignored in stock calculation
+    add_entries(1, [
+        {"item": "Transport", "quantity": None, "amount": 2000, "type": "expense"},
+    ], "transport", "")
+    
+    stock_levels = get_stock_levels(1)
+    assert len(stock_levels) == 2  # Rice and Beans only (Transport has no quantity)
+    
+    rice = next(s for s in stock_levels if s["item"] == "Rice")
+    beans = next(s for s in stock_levels if s["item"] == "Beans")
+    
+    assert rice["quantity_remaining"] == 9.0  # 10 + 5 - 4 - 2
+    assert beans["quantity_remaining"] == 2.0  # 3 - 1
+
+
+def test_get_stock_levels_returns_empty_for_no_quantity_data(tmp_db: Path, _patch_db):
+    """Items without quantity data should not appear in stock levels."""
+    add_entries(1, [
+        {"item": "Transport", "quantity": None, "amount": 2000, "type": "expense"},
+        {"item": "Rent", "quantity": None, "amount": 15000, "type": "expense"},
+    ], "no quantity items", "")
+    
+    stock_levels = get_stock_levels(1)
+    assert stock_levels == []
+
+
+def test_get_top_items_ranks_by_profit(tmp_db: Path, _patch_db):
+    """Test that items are ranked by profit (sales minus cost)."""
+    # Rice: bought for 50000, sold for 75000 -> profit 25000
+    add_entries(1, [
+        {"item": "Rice", "quantity": 10, "amount": 50000, "type": "expense"},
+        {"item": "Rice", "quantity": 5, "amount": 75000, "type": "sale"},
+    ], "rice transactions", "")
+    
+    # Beans: bought for 20000, sold for 30000 -> profit 10000
+    add_entries(1, [
+        {"item": "Beans", "quantity": 5, "amount": 20000, "type": "expense"},
+        {"item": "Beans", "quantity": 2, "amount": 30000, "type": "sale"},
+    ], "beans transactions", "")
+    
+    # Yam: bought for 30000, sold for 40000 -> profit 10000
+    add_entries(1, [
+        {"item": "Yam", "quantity": 8, "amount": 30000, "type": "expense"},
+        {"item": "Yam", "quantity": 3, "amount": 40000, "type": "sale"},
+    ], "yam transactions", "")
+    
+    top_items = get_top_items(1, metric="profit", period_days=30)
+    assert len(top_items) == 3
+    assert top_items[0]["item"] == "Rice"
+    assert top_items[0]["total_profit"] == 25000
+    assert top_items[1]["item"] in ["Beans", "Yam"]  # Both have 10000 profit
+    assert top_items[1]["total_profit"] == 10000
+
+
+def test_get_top_items_ranks_by_volume(tmp_db: Path, _patch_db):
+    """Test that items can be ranked by transaction volume."""
+    # Rice: 75000 + 45000 = 120000 total volume
+    add_entries(1, [
+        {"item": "Rice", "amount": 75000, "type": "sale"},
+        {"item": "Rice", "amount": 45000, "type": "sale"},
+    ], "rice sales", "")
+    
+    # Beans: 30000 total volume
+    add_entries(1, [
+        {"item": "Beans", "amount": 30000, "type": "sale"},
+    ], "beans sales", "")
+    
+    top_items = get_top_items(1, metric="volume", period_days=30)
+    assert len(top_items) == 2
+    assert top_items[0]["item"] == "Rice"
+    assert top_items[0]["total_volume"] == 120000
+    assert top_items[1]["item"] == "Beans"
+    assert top_items[1]["total_volume"] == 30000
+
+
+def test_get_expense_breakdown_groups_by_category(tmp_db: Path, _patch_db):
+    """Test that expenses are grouped by item/category."""
+    add_entries(1, [
+        {"item": "Transport", "quantity": None, "amount": 5000, "type": "expense"},
+        {"item": "Transport", "quantity": None, "amount": 3000, "type": "expense"},
+        {"item": "Rent", "quantity": None, "amount": 15000, "type": "expense"},
+        {"item": "Rent", "quantity": None, "amount": 15000, "type": "expense"},
+        {"item": "Fuel", "quantity": None, "amount": 2000, "type": "expense"},
+    ], "expense transactions", "")
+    
+    breakdown = get_expense_breakdown(1, period_days=30)
+    assert len(breakdown) == 3
+    
+    transport = next(b for b in breakdown if b["category"] == "Transport")
+    rent = next(b for b in breakdown if b["category"] == "Rent")
+    fuel = next(b for b in breakdown if b["category"] == "Fuel")
+    
+    assert transport["total_amount"] == 8000  # 5000 + 3000
+    assert transport["entry_count"] == 2
+    assert rent["total_amount"] == 30000  # 15000 + 15000
+    assert rent["entry_count"] == 2
+    assert fuel["total_amount"] == 2000
+    assert fuel["entry_count"] == 1
+    
+    # Should be sorted by total amount descending
+    assert breakdown[0]["category"] == "Rent"
+    assert breakdown[1]["category"] == "Transport"
+    assert breakdown[2]["category"] == "Fuel"
+
+
+def test_get_expense_breakdown_returns_empty_for_no_expenses(tmp_db: Path, _patch_db):
+    """No expenses should return empty breakdown."""
+    add_entries(1, [
+        {"item": "Rice", "amount": 45000, "type": "sale"},
+    ], "sale only", "")
+    
+    breakdown = get_expense_breakdown(1, period_days=30)
+    assert breakdown == []
 
 
 # ---------------------------------------------------------------------------

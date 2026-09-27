@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     id             SERIAL PRIMARY KEY,
     phone_or_name  TEXT    NOT NULL,
     language       TEXT    NOT NULL DEFAULT 'en',
-    created_at     TEXT    NOT NULL DEFAULT NOW()
+    created_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Entries table
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS entries (
     status      TEXT    NOT NULL DEFAULT 'active'
                                CHECK (status IN ('active', 'voided')),
     replaces_entry_id INTEGER REFERENCES entries(id),
-    created_at  TEXT    NOT NULL DEFAULT NOW()
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 -- Debts table
@@ -55,8 +55,8 @@ CREATE TABLE IF NOT EXISTS debts (
     direction   TEXT    NOT NULL CHECK (direction IN ('owed_to_me', 'i_owe')),
     status      TEXT    NOT NULL DEFAULT 'open'
                                CHECK (status IN ('open', 'paid')),
-    created_at  TEXT    NOT NULL DEFAULT NOW(),
-    paid_at     TEXT
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    paid_at     TIMESTAMP
 );
 
 -- Indexes

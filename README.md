@@ -316,6 +316,18 @@ Note: With PostgreSQL (Supabase), your data persists across deployments without 
 For the pilot/demo phase a **Starter** web service + free Static Site is the
 minimum sensible configuration.
 
+### Keeping the app warm on free tier (optional)
+
+If you deploy on Render's free tier, the service sleeps after 15 minutes of inactivity,
+causing model re-downloads on wake (30-90 second cold starts). To prevent this:
+
+1. Set up a free external uptime monitor (e.g., [UptimeRobot](https://uptimerobot.com/))
+2. Configure it to ping `GET /health` (or `GET /`) every 10-14 minutes
+3. This keeps the app warm without cost
+
+The `/health` endpoint is lightweight and returns status immediately without loading
+ASR models or performing heavy processing, making it safe for frequent health checks.
+
 ## WhatsApp Setup
 
 Veyra receives and answers WhatsApp messages through the **WhatsApp Cloud API**

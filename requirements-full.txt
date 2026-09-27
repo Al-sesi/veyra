@@ -12,7 +12,7 @@ python-dotenv==1.2.3
 transformers==4.45.1
 librosa==0.10.2.post1
 soundfile==0.12.1
-pydub==0.25.1
+imageio-ffmpeg==0.5.1
 
 # PyTorch CPU-only wheel keeps install small; remove `--extra-index-url` line
 # and use `pip install torch` directly if you want GPU/CUDA support.

@@ -26,11 +26,15 @@ recommend in their "Basic Usage" example:
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger("veyra.asr")
 
 # ---------------------------------------------------------------------------
 # Heavy imports (librosa, numpy, transformers, torch) are deferred until the
@@ -193,9 +197,32 @@ def language_notice(language: str) -> Optional[str]:
     )
 
 
-def _check_ffmpeg() -> bool:
-    """Check if ffmpeg is available on PATH. Returns True if available, False otherwise."""
-    return shutil.which("ffmpeg") is not None
+def _get_ffmpeg_path() -> Optional[str]:
+    """
+    Find ffmpeg executable in order of preference:
+    1. System ffmpeg on PATH
+    2. Bundled binary from imageio-ffmpeg package
+    Returns None if neither is available.
+    """
+    # First check system PATH
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        logger.info(f"Using system ffmpeg: {system_ffmpeg}")
+        return system_ffmpeg
+    
+    # Fall back to bundled ffmpeg from imageio-ffmpeg
+    try:
+        import imageio_ffmpeg
+        bundled_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        if bundled_ffmpeg and os.path.exists(bundled_ffmpeg):
+            logger.info(f"Using bundled ffmpeg from imageio-ffmpeg: {bundled_ffmpeg}")
+            return bundled_ffmpeg
+    except ImportError:
+        logger.warning("imageio-ffmpeg not installed, no bundled ffmpeg available")
+    except Exception as e:
+        logger.warning(f"Failed to get bundled ffmpeg: {e}")
+    
+    return None
 
 
 def _convert_to_wav_16k_mono(audio_path: str) -> str:
@@ -212,10 +239,11 @@ def _convert_to_wav_16k_mono(audio_path: str) -> str:
     if not os.path.isfile(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    if not _check_ffmpeg():
+    ffmpeg_path = _get_ffmpeg_path()
+    if not ffmpeg_path:
         raise RuntimeError(
-            "ffmpeg was not found on PATH. It is required to convert WhatsApp "
-            ".ogg (Opus) voice notes to 16 kHz mono WAV.\n"
+            "ffmpeg was not found on PATH and no bundled ffmpeg is available. "
+            "It is required to convert WhatsApp .ogg (Opus) voice notes to 16 kHz mono WAV.\n"
             "Install: https://ffmpeg.org/download.html  or  "
             "`winget install Gyan.FFmpeg`  on Windows / "
             "`brew install ffmpeg`  on macOS / "
@@ -234,7 +262,7 @@ def _convert_to_wav_16k_mono(audio_path: str) -> str:
     #   -ac 1          mono (1 audio channel)
     #   -acodec pcm_s16le   16-bit little-endian PCM (standard WAV)
     cmd = [
-        "ffmpeg", "-y", "-i", audio_path,
+        ffmpeg_path, "-y", "-i", audio_path,
         "-ar", "16000",
         "-ac", "1",
         "-acodec", "pcm_s16le",

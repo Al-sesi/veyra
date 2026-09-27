@@ -260,16 +260,45 @@ def test_transcribe_cleans_up_temp_wav(monkeypatch, tmp_path, fake_input_file, r
     assert not temp_wav.exists(), "Temporary WAV was not cleaned up after transcribe()"
 
 
-def test_check_ffmpeg_returns_none_when_present(monkeypatch):
-    """_check_ffmpeg should not raise when ffmpeg is on PATH."""
+def test_get_ffmpeg_path_returns_system_when_present(monkeypatch):
+    """_get_ffmpeg_path should return system ffmpeg when on PATH."""
     monkeypatch.setattr(asr_module.shutil, "which", lambda cmd: "/usr/bin/ffmpeg")
-    assert asr_module._check_ffmpeg() is None
+    assert asr_module._get_ffmpeg_path() == "/usr/bin/ffmpeg"
 
 
-def test_check_ffmpeg_raises_when_missing(monkeypatch):
+def test_get_ffmpeg_path_returns_bundled_when_system_missing(monkeypatch):
+    """_get_ffmpeg_path should fall back to bundled ffmpeg when system is missing."""
+    # Simulate no system ffmpeg
     monkeypatch.setattr(asr_module.shutil, "which", lambda cmd: None)
-    with pytest.raises(RuntimeError, match="ffmpeg was not found"):
-        asr_module._check_ffmpeg()
+    
+    # Make the import work by installing imageio-ffmpeg temporarily
+    import importlib
+    try:
+        import imageio_ffmpeg
+        bundled_ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        if bundled_ffmpeg and os.path.exists(bundled_ffmpeg):
+            assert asr_module._get_ffmpeg_path() == bundled_ffmpeg
+        else:
+            # If bundled ffmpeg doesn't exist, should return None
+            assert asr_module._get_ffmpeg_path() is None
+    except ImportError:
+        # If imageio-ffmpeg is not installed, should return None
+        assert asr_module._get_ffmpeg_path() is None
+
+
+def test_get_ffmpeg_path_returns_none_when_both_missing(monkeypatch):
+    """_get_ffmpeg_path should return None when both system and bundled are missing."""
+    monkeypatch.setattr(asr_module.shutil, "which", lambda cmd: None)
+    monkeypatch.setitem(sys.modules, 'imageio_ffmpeg', None)
+    assert asr_module._get_ffmpeg_path() is None
+
+
+def test_convert_to_wav_raises_when_ffmpeg_missing(monkeypatch, fake_input_file):
+    """_convert_to_wav_16k_mono should raise friendly error when ffmpeg is unavailable."""
+    monkeypatch.setattr(asr_module, "_get_ffmpeg_path", lambda: None)
+    
+    with pytest.raises(RuntimeError, match="ffmpeg was not found on PATH and no bundled ffmpeg is available"):
+        asr_module._convert_to_wav_16k_mono(str(fake_input_file))
 
 
 def test_language_config_has_core_nigerian_language_entries():

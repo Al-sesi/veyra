@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: veyra-api
+    env: python
+    plan: starter
+    buildCommand: chmod +x render-build.sh && ./render-build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: HF_HOME
+        value: /var/data/hf-cache
+      - key: TRANSFORMERS_CACHE
+        value: /var/data/hf-cache
+      - key: VEYRA_CORS_ORIGINS
+        sync: false
+        value: https://veyra-seven-beryl.vercel.app
+      - key: DATABASE_URL
+        sync: false
+        value: postgresql://postgres:[PASSWORD]@[PROJECT-REF].pooler.supabase.com:6543/postgres
+    disk:
+      name: veyra-data
+      mountPath: /var/data
+      sizeGB: 10
+    healthCheckPath: /
+    autoDeploy: true

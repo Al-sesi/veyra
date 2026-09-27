@@ -13,11 +13,9 @@ services:
       - key: TRANSFORMERS_CACHE
         value: /var/data/hf-cache
       - key: VEYRA_CORS_ORIGINS
-        sync: false
         value: https://veyra-seven-beryl.vercel.app
       - key: DATABASE_URL
         sync: false
-        value: postgresql://postgres:[PASSWORD]@[PROJECT-REF].pooler.supabase.com:6543/postgres
     disk:
       name: veyra-data
       mountPath: /var/data

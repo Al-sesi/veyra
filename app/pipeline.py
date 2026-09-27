@@ -258,19 +258,48 @@ def process_voice_note(
     # Debts
     # ------------------------------------------------------------------
     if intent in ("debt_owed_to_me", "debt_i_owe"):
-        amount = extract_amount(transcript)
-        person = extract_person(transcript, intent)
-        if amount is None or person is None:
+        # Split transcript by debt statements to handle multiple debts in one message
+        from app.parser import split_transactions
+        debt_segments = split_transactions(transcript)
+        
+        if not debt_segments:
+            debt_segments = [transcript]  # Fallback to original if splitting fails
+        
+        debts_added = []
+        direction = "owed_to_me" if intent == "debt_owed_to_me" else "i_owe"
+        
+        for segment in debt_segments:
+            amount = extract_amount(segment)
+            person = extract_person(segment, intent)
+            
+            if amount is None or person is None:
+                continue  # Skip incomplete debt statements
+            
+            debt = add_debt(user_id, person, amount, direction, db_path=db_path)
+            debts_added.append(debt)
+        
+        if not debts_added:
             return _response(
                 transcript, user_id, db_path, DEBT_MISSING_DETAILS_REPLY, saved=False, language_notice_text=notice_text
             )
-        direction = "owed_to_me" if intent == "debt_owed_to_me" else "i_owe"
-        debt = add_debt(user_id, person, amount, direction, db_path=db_path)
+        
+        # Build reply with all debts
         if direction == "owed_to_me":
-            reply = f"Noted: {person} owes you {format_naira(amount)} naira."
+            if len(debts_added) == 1:
+                reply = f"Noted: {debts_added[0]['person']} owes you {format_naira(debts_added[0]['amount'])} naira."
+            else:
+                reply = f"Noted: {len(debts_added)} debts recorded. "
+                for debt in debts_added:
+                    reply += f"{debt['person']} owes you {format_naira(debt['amount'])} naira. "
         else:
-            reply = f"Noted: you owe {person} {format_naira(amount)} naira."
-        return _response(transcript, debt["user_id"], db_path, reply, saved=True, language_notice_text=notice_text)
+            if len(debts_added) == 1:
+                reply = f"Noted: you owe {debts_added[0]['person']} {format_naira(debts_added[0]['amount'])} naira."
+            else:
+                reply = f"Noted: {len(debts_added)} debts recorded. "
+                for debt in debts_added:
+                    reply += f"You owe {debt['person']} {format_naira(debt['amount'])} naira. "
+        
+        return _response(transcript, debts_added[0]["user_id"], db_path, reply, debts_added, saved=True, language_notice_text=notice_text)
 
     if intent == "debt_paid":
         if user_id is None:

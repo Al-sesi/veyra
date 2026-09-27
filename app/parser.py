@@ -77,21 +77,12 @@ def _lookup_number_word(word: str) -> Optional[int]:
     return None
 
 
-def parse_written_number_words(words: List[str]) -> Optional[int]:
-    """
-    Parse a list of pure word-only number tokens (no Arabic numerals, no k)
-    into an integer. Accepts English and Yoruba number words.
-    Example: ["five", "thousand"] -> 5000, ["twenty", "five"] -> 25,
-             ["egberun", "marun"] -> 5000 (Yoruba word order).
-    Returns None if the tokens don't form a valid number phrase.
-    """
+def _parse_number_values(words: List[str]) -> Optional[int]:
+    """Helper to parse number word values without sha handling (to avoid recursion)."""
     if not words:
         return None
-
-    # Lowercase and strip punctuation for comparison
-    clean = [w.lower().strip(".,!?;:") for w in words]
     values: List[int] = []
-    for w in clean:
+    for w in words:
         v = _lookup_number_word(w)
         if v is None:
             return None
@@ -106,6 +97,8 @@ def parse_written_number_words(words: List[str]) -> Optional[int]:
             return values[0]
         return values[0] * multiplier if multiplier > 0 else None
 
+    # English/Pidgin: "five thousand" -> multiplier comes first, then scale
+    # Find the scale word (value >= 1000) and multiply the sum of words before it
     total = 0
     current = 0
     for v in values:
@@ -121,6 +114,93 @@ def parse_written_number_words(words: List[str]) -> Optional[int]:
             current += v
     total += current
     return total if total > 0 else None
+
+def parse_written_number_words(words: List[str]) -> Optional[int]:
+    """
+    Parse a list of pure word-only number tokens (no Arabic numerals, no k)
+    into an integer. Accepts English and Yoruba number words.
+    Example: ["five", "thousand"] -> 5000, ["twenty", "five"] -> 25,
+             ["egberun", "marun"] -> 5000 (Yoruba word order).
+    Hausa addition: ["dubu", "goma", "sha", "biyu"] -> 12000 (10000 + 2000).
+    Returns None if the tokens don't form a valid number phrase.
+    """
+    if not words:
+        return None
+
+    # Lowercase and strip punctuation for comparison
+    clean = [w.lower().strip(".,!?;:") for w in words]
+    
+    # Handle Hausa "da sha" (and plus) connector for compound numbers
+    # "dubu goma da sha uku" = 10000 + 3000 = 13000
+    if "da" in clean and "sha" in clean:
+        da_index = clean.index("da")
+        sha_index = clean.index("sha")
+        # Check if sha comes immediately after da
+        if sha_index == da_index + 1:
+            # Split into parts before "da" and after "sha"
+            before_part = clean[:da_index]
+            after_part = clean[sha_index + 1:]
+            
+            # Only proceed if both parts have content
+            if before_part and after_part:
+                # Parse each part separately using the helper
+                before_value = _parse_number_values(before_part)
+                after_value = _parse_number_values(after_part)
+                
+                if before_value is not None and after_value is not None:
+                    # Special case: if before part is in thousands (>= 1000) and after part is < 1000,
+                    # interpret the after part as also being in thousands (multiply by 1000)
+                    if before_value >= 1000 and after_value < 1000:
+                        after_value = after_value * 1000
+                    return before_value + after_value
+            # If either part fails or is empty, continue with normal parsing (skip da sha)
+            clean = [w for w in clean if w not in ["da", "sha"]]
+    
+    # Handle Hausa "sha" (and/plus) connector for compound numbers
+    # "dubu goma sha biyu" = 10000 + 2000 = 12000 (contextual: biyu = 2, but after sha with thousands it's 2000)
+    if "sha" in clean:
+        sha_index = clean.index("sha")
+        # Split into parts before and after "sha"
+        before_part = clean[:sha_index]
+        after_part = clean[sha_index + 1:]
+        
+        # Only proceed if both parts have content
+        if before_part and after_part:
+            # Parse each part separately using the helper
+            before_value = _parse_number_values(before_part)
+            after_value = _parse_number_values(after_part)
+            
+            if before_value is not None and after_value is not None:
+                # Special case: if before part is in thousands (>= 1000) and after part is < 1000,
+                # interpret the after part as also being in thousands (multiply by 1000)
+                # This handles "dubu goma sha biyu" = 10000 + (2 * 1000) = 12000
+                if before_value >= 1000 and after_value < 1000:
+                    after_value = after_value * 1000
+                return before_value + after_value
+        # If either part fails or is empty, continue with normal parsing (skip sha)
+        clean = [w for w in clean if w != "sha"]
+    
+    # Handle Hausa "da" (and) connector for compound numbers
+    # "dubu tara da daribiyet" = 9000 + 50 = 9050
+    if "da" in clean:
+        da_index = clean.index("da")
+        # Split into parts before and after "da"
+        before_part = clean[:da_index]
+        after_part = clean[da_index + 1:]
+        
+        # Only proceed if both parts have content
+        if before_part and after_part:
+            # Parse each part separately using the helper
+            before_value = _parse_number_values(before_part)
+            after_value = _parse_number_values(after_part)
+            
+            if before_value is not None and after_value is not None:
+                return before_value + after_value
+        # If either part fails or is empty, continue with normal parsing (skip da)
+        clean = [w for w in clean if w != "da"]
+    
+    # Normal number parsing for non-sha cases
+    return _parse_number_values(clean)
 
 
 def parse_slang_hyphenated(token: str) -> Optional[int]:
@@ -620,22 +700,45 @@ def split_transactions(text: str) -> List[str]:
       "Sold rice 2.5k. Bought beans 15k." -> ["Sold rice 2.5k", "Bought beans 15k"]
     """
     normalized = re.sub(r"\s+(and|then)\s+", " , ", text, flags=re.IGNORECASE)
-    # Split rules (split on the match, then drop the separator):
-    #   1. Semicolon `;`         -> always split.
-    #   2. Comma `,`             -> split ONLY if it is NOT flanked by digits on BOTH sides.
-    #                               (A comma between digits is a thousand separator like 45,000.)
-    #   3. Period `.`            -> split ONLY if it is NOT flanked by digits on BOTH sides.
-    #                               (A period between digits is a decimal like 2.5k.)
-    #
-    # Regex explanation:
-    #   `;`                     -> any semicolon
-    #   `,(?!(?<=\d,)\d)`       -> comma NOT followed by digit that itself follows digit-comma
-    #      Equivalent: split on comma unless the comma is strictly between two digits.
-    parts = re.split(
-        r";|,(?!(?<=\d,)\d)|(?<!\d)\.(?!\d)",
-        normalized,
-    )
-    return [p.strip() for p in parts if p.strip()]
+    
+    # First, handle Hausa "kuma" (and) as a transaction separator
+    # "kuma na saya" starts a new transaction
+    parts = re.split(r"\s+kuma\s+", normalized)
+    
+    # Now split each part on commas/periods/semicolons
+    final_parts = []
+    for part in parts:
+        # Check if this part contains a Hausa pattern like "na saya [item], [amount]"
+        # If so, keep it together
+        has_hausa_pattern = False
+        part_lower = part.lower()
+        
+        # Check for patterns like "na saya [item], [number words]"
+        if any(verb in part_lower for verb in PACK_BUY_VERBS):
+            # Check if there's a comma followed by number words
+            if "," in part:
+                # Split by commas and check if any segment after a comma starts with number words
+                segments = part.split(",")
+                for i, seg in enumerate(segments[1:], 1):  # Skip first segment
+                    seg_lower = seg.strip().lower()
+                    first_words = seg_lower.split()[:2]  # Check first 2 words
+                    if any(word in ALL_NUMBER_WORDS for word in first_words):
+                        # This is likely "na saya [item], [amount]" pattern
+                        has_hausa_pattern = True
+                        break
+        
+        if has_hausa_pattern:
+            # Keep this part together
+            final_parts.append(part.strip())
+        else:
+            # Use original splitting logic
+            subparts = re.split(
+                r";|,(?!(?<=\d,)\d)|(?<!\d)\.(?!\d)",
+                part
+            )
+            final_parts.extend([p.strip() for p in subparts if p.strip()])
+    
+    return [p.strip() for p in final_parts if p.strip()]
 
 
 # ---------------------------------------------------------------------------

@@ -471,8 +471,44 @@ def extract_person(text: str, intent: str) -> Optional[str]:
 
     words = re.findall(r"[^\W\d_][\w'\-]*", scope, flags=re.UNICODE)
     kept = [w for w in words if strip_diacritics(w.lower()) not in PERSON_STOPWORDS]
+    
+    # Filter out number words that might be mistaken for names
+    from app.parser import ALL_NUMBER_WORDS
+    kept = [w for w in kept if strip_diacritics(w.lower()) not in ALL_NUMBER_WORDS]
+    
+    # Filter out very short words that are likely just verb fragments
+    # But keep 2-letter words that could be name parts
+    kept = [w for w in kept if len(w) >= 2]
+    
+    # Additional filter: for debt_i_owe intent, if the remaining words are common
+    # Hausa verb fragments or stopwords that aren't names, use fallback
+    if intent == DEBT_I_OWE_INTENT:
+        # Common verb fragments that appear after "ina bi" but aren't names
+        verb_fragments = {"bi", "bin", "bina", "shi", "wannan"}
+        filtered_verbs = [w for w in kept if strip_diacritics(w.lower()) not in verb_fragments]
+        if filtered_verbs:
+            kept = filtered_verbs
+        else:
+            # If only verb fragments remain after trigger, try looking before trigger
+            # This handles cases like "tsohama abu maggi ina bin shi" where name is before trigger
+            if trigger:
+                _, start, end = trigger
+                before_scope = work[:start]
+                before_words = re.findall(r"[^\W\d_][\w'\-]*", before_scope, flags=re.UNICODE)
+                before_kept = [w for w in before_words if strip_diacritics(w.lower()) not in PERSON_STOPWORDS]
+                before_kept = [w for w in before_kept if strip_diacritics(w.lower()) not in ALL_NUMBER_WORDS]
+                before_kept = [w for w in before_kept if len(w) >= 2]
+                # Take last word before trigger (most likely the actual name)
+                if before_kept:
+                    kept = before_kept[-1:]
+                else:
+                    # If no clear name found before trigger either, use fallback
+                    return "someone"
+            else:
+                return "someone"
+    
     if not kept:
-        return None
+        return "someone"  # Fallback when no clear name is extracted
     if intent in _NAME_BEFORE_TRIGGER:
         kept = kept[-3:]  # closest words to the trigger
     else:

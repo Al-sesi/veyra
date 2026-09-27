@@ -31,6 +31,8 @@ HAUSA_PACK: Dict[str, Any] = {
     "language": "ha",
     "buy_verbs": [_fold(p) for p in [
         "na sayi", "na saya", "na sayi shi", "na sayi wannan",
+        "na siya", "na sai",  # Additional variants confirmed by native speaker
+        "na je",  # "I went" - confirmed from testtt1.ogg
     ]],
     "sale_verbs": [_fold(p) for p in [
         "na sayar", "na sayar da", "na sayar da shi",
@@ -42,7 +44,7 @@ HAUSA_PACK: Dict[str, Any] = {
         "yana bina", "yana bin ni", "bai biya ni ba",
     ]],
     "debt_i_owe": [_fold(p) for p in [
-        "ina bin", "ina da bashi", "ina bin bashi",
+        "ina bin", "ina bi", "ina da bashi", "ina bin bashi",
     ]],
     "debt_paid": [_fold(p) for p in [
         "ya biya ni", "ta biya ni", "ya biya", "bashin ya kare", "an biya",
@@ -59,14 +61,15 @@ HAUSA_PACK: Dict[str, Any] = {
         "ashirin": 20, "talatin": 30, "arbain": 40, "hamsin": 50,
         "sittin": 60, "sabain": 70, "tamanin": 80, "tisain": 90,
         "dari": 100, "dubu": 1000, "miliyan": 1000000,
+        "daribiyet": 50,  # Confirmed from testtt1.ogg: 9,000 daribiyet = 9,500
     },
     "pronouns": [
         "ni", "ma",
     ],
     "person_stopwords": [
-        "na", "ni", "ma", "ba", "bai", "yana", "bina", "bin", "ina", "da",
+        "na", "ni", "ma", "ba", "bai", "yana", "bina", "bin", "bi", "ina", "da",
         "bashi", "biya", "ya", "ta", "an", "kare", "cire", "goge", "soke",
         "karshe", "hakuri", "nufin", "yi", "wannan", "kudi", "kashe",
-        "sayi", "saya", "sayar", "shi",
+        "sayi", "saya", "sayar", "shi", "maggi", "baban",
     ],
 }

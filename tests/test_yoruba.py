@@ -203,8 +203,8 @@ def test_yoruba_debt_i_owe():
     for text in ["mo jẹ ọ 10k", "mo je o 10k", "mo jẹ ẹ 10k", "mo jẹ wọ́n 10k"]:
         assert classify_message(text) == "debt_i_owe", text
     assert extract_amount("mo jẹ ọ 10k") == 10000
-    # "ọ" is the pronoun "you", not a name -> pipeline asks who.
-    assert extract_person("mo jẹ ọ 10k", "debt_i_owe") is None
+    # "ọ" is the pronoun "you", not a name -> falls back to "someone"
+    assert extract_person("mo jẹ ọ 10k", "debt_i_owe") == "someone"
 
 
 def test_yoruba_debt_paid():

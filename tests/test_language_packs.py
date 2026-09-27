@@ -13,6 +13,7 @@ from app.parser import (
     detect_transaction_type,
     parse_transcript,
     parse_written_number_words,
+    split_transactions,
     strip_diacritics,
 )
 
@@ -151,6 +152,119 @@ def test_hausa_correction_triggers():
     assert classify_message("a'a, 4k ne") == "correction"
     assert extract_amount("a'a, 4k ne") == 4000
     assert classify_message("yi hakuri, 5k") == "correction"
+
+
+def test_hausa_new_buy_verbs():
+    """Test newly added Hausa buy verb variants confirmed by native speaker."""
+    # "siya" and "sai" should be recognized as buy verbs
+    assert classify_message("na siya rice 5k") == "entry"
+    assert classify_message("na sai alewa 10k") == "entry"
+    
+    # Parse should recognize these as expenses
+    from app.parser import parse_transcript
+    entries = parse_transcript("na siya biskit dubu biyar")
+    assert len(entries) == 1
+    assert entries[0]["type"] == "expense"
+    assert entries[0]["amount"] == 5000
+
+
+def test_hausa_compound_numbers_with_sha():
+    """Test Hausa compound numbers using 'sha' (and/plus) connector."""
+    from app.parser import parse_transcript
+    # "dubu goma sha biyu" = 10000 + 2000 = 12000 (contextual: biyu = 2, but after sha with thousands it's 2000)
+    entries = parse_transcript("na siya maggi dubu goma sha biyu")
+    assert len(entries) == 1
+    assert entries[0]["amount"] == 12000  # 10000 + 2000
+    assert entries[0]["type"] == "expense"
+    
+    # Test compound with thousands: "dubu goma sha dubu biyar" = 10000 + 5000 = 15000
+    entries = parse_transcript("na sai alewa dubu goma sha dubu biyar")
+    assert len(entries) == 1
+    assert entries[0]["amount"] == 15000  # 10000 + 5000
+
+
+def test_hausa_multiple_debt_statements():
+    """Test that multiple debt statements in one transcript are captured separately."""
+    from app.parser import split_transactions
+    
+    # Test with simpler debt statements (debt portion of testtt.ogg)
+    transcript = "ina bin shi dubu biyar, ina bi baban musa dubu goma sha biyu, ina bi isma'iyi dubu takwas"
+    
+    # Split into segments and check each can be parsed
+    segments = split_transactions(transcript)
+    
+    # Should have 3 debt statements
+    assert len(segments) == 3
+    
+    # Each should have debt_i_owe intent
+    for seg in segments:
+        assert classify_message(seg) == "debt_i_owe"
+        person = extract_person(seg, "debt_i_owe")
+        # Should extract names or fallback to someone
+        assert person is not None
+
+
+def test_hausa_person_name_fallback():
+    """Test that unclear person names fall back to 'someone' instead of number words."""
+    # "ina bi dubu biyar" - "dubu biyar" are number words, "bi" is a verb fragment
+    person = extract_person("ina bi dubu biyar", "debt_i_owe")
+    # Should return "someone" since no clear name is present
+    assert person == "someone"
+    
+    # "ina bi abu maggi" - "abu" is a name, "maggi" is an item
+    person = extract_person("ina bi abu maggi dubu biyar", "debt_i_owe")
+    # Should extract "Abu" as the name
+    assert person == "Abu"
+
+
+def test_testtt_ogg_transcript():
+    """Test the exact testtt.ogg transcript with all entries and debts."""
+    from app.parser import split_transactions
+    
+    # Exact transcript from testtt.ogg
+    transcript = "na siya biskit dubu biyar, na sai alewa na dubu goma, na sai abin gatimati gongoni na dubu takwas, na sai maggi na dubu goma sha biyu, tsohama abu maggi ina bin shi dubu biyar, ina bi baban musa dubu goma sha biyu, ina bi isma'iyi dubu takwas, ina bi abubuƙa dubu uku."
+    
+    # Split into segments
+    segments = split_transactions(transcript)
+    
+    # Should have 8 segments (4 expenses + 4 debts)
+    assert len(segments) == 8
+    
+    # First 4 should be entry intents (expenses)
+    for i in range(4):
+        assert classify_message(segments[i]) == "entry"
+    
+    # Last 4 should be debt_i_owe intents
+    for i in range(4, 8):
+        assert classify_message(segments[i]) == "debt_i_owe"
+    
+    # Test expense parsing
+    expense_entries = parse_transcript(segments[0])
+    assert len(expense_entries) == 1
+    assert expense_entries[0]["type"] == "expense"
+    assert expense_entries[0]["amount"] == 5000  # dubu biyar = 5000
+    
+    # Test compound number with sha
+    sha_entry = parse_transcript(segments[3])
+    assert len(sha_entry) == 1
+    assert sha_entry[0]["amount"] == 12000  # dubu goma sha biyu = 10000 + 2000
+    
+    # Test debt name extraction
+    # "tsohama abu maggi ina bin shi dubu biyar" - should extract "Abu" as name (maggi is item/stopword)
+    person = extract_person(segments[4], "debt_i_owe")
+    assert person == "Abu"
+    
+    # "ina bi baban musa dubu goma sha biyu" - should extract "Musa" (baban = father of, is a title)
+    person = extract_person(segments[5], "debt_i_owe")
+    assert person == "Musa"
+    
+    # "ina bi isma'iyi dubu takwas" - should extract "Isma'iyi"
+    person = extract_person(segments[6], "debt_i_owe")
+    assert person == "Isma'iyi"
+    
+    # "ina bi abubuƙa dubu uku" - should extract "Abubuƙa"
+    person = extract_person(segments[7], "debt_i_owe")
+    assert person == "Abubuƙa"
 
 
 # ---------------------------------------------------------------------------

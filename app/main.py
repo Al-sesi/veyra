@@ -91,6 +91,17 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
                 pass
     # Initialize database - init_db handles both SQLite and PostgreSQL based on DATABASE_URL
     init_db()
+    
+    # Log which ffmpeg is being used for audio conversion
+    try:
+        from app.asr import _get_ffmpeg_path
+        ffmpeg_path = _get_ffmpeg_path()
+        if ffmpeg_path:
+            logger.info(f"Using ffmpeg: {ffmpeg_path}")
+        else:
+            logger.warning("No ffmpeg available - audio processing will fail")
+    except Exception as e:
+        logger.warning(f"Could not check ffmpeg availability: {e}")
 
 
 @app.get("/")

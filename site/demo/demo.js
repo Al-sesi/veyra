@@ -19,8 +19,12 @@ const API_BASE = (function () {
   if (/127\.0\.0\.1|localhost/.test(probe) && window.location.port) {
     return probe;
   }
-  return LOCAL_FALLBACK;
+  return RENDER_BACKEND; // Default to Render backend for all other cases
 })();
+
+// Debug: Log the API base being used
+console.log("API_BASE:", API_BASE);
+console.log("window.location.origin:", window.location.origin);
 const UID_KEY = "veyra_demo_uid";
 
 const LANG_NAMES = { yo: "Yorùbá", ha: "Hausa", ig: "Igbo", en: "English", pcm: "Pidgin" };
@@ -371,9 +375,11 @@ async function sendPending() {
     await refreshBook();
   } catch (err) {
     hideTyping();
+    console.error("API Error:", err);
+    console.error("API_BASE:", API_BASE);
     addErrorBubble(
       err.message.includes("Failed to fetch")
-        ? `Cannot reach Veyra at ${API_BASE}. Start it with: python -m uvicorn app.main:app --port 8000`
+        ? `Cannot reach Veyra at ${API_BASE}. Please check your internet connection.`
         : `Something went wrong: ${err.message}`
     );
   } finally {

@@ -284,16 +284,31 @@
   padding: 0.5rem 0.75rem;
 }
 
-#pendingName { 
-  font-size: 0.8rem; 
-  font-weight: 600; 
-  color: #111b21; 
+#pendingName {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111b21;
   flex: 1;
 }
-#pendingPlayer { 
-  height: 28px; 
+#pendingPlayer {
+  height: 28px;
   max-width: 180px;
   flex: 1;
+}
+.text-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 0.5rem;
+  border: 1px solid #d1d7db;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  resize: vertical;
+  margin-bottom: 0.5rem;
+}
+.text-input:focus {
+  outline: none;
+  border-color: #00a884;
 }
 
 /* ---------------- Compact book panel ---------------- */

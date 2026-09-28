@@ -29,9 +29,11 @@ const chatLog = document.getElementById("chatLog");
 const micBtn = document.getElementById("micBtn");
 const recordHint = document.getElementById("recordHint");
 const fileInput = document.getElementById("fileInput");
+const textBtn = document.getElementById("textBtn");
 const pendingBar = document.getElementById("pendingBar");
 const pendingName = document.getElementById("pendingName");
 const pendingPlayer = document.getElementById("pendingPlayer");
+const textInput = document.getElementById("textInput");
 const sendBtn = document.getElementById("sendBtn");
 const discardBtn = document.getElementById("discardBtn");
 const resetBookBtn = document.getElementById("resetBookBtn");
@@ -45,6 +47,7 @@ const bookEntries = document.getElementById("bookEntries");
 let currentLang = "yo";
 let pendingBlob = null;
 let pendingFilename = "";
+let pendingText = null;
 let recorder = null; // {stream, ctx, source, processor, chunks}
 let objectUrl = null;
 
@@ -146,12 +149,24 @@ function setPending(blob, filename) {
   pendingBar.hidden = false;
 }
 
+function setPendingText() {
+  clearPending();
+  pendingText = true;
+  pendingName.textContent = "Text message";
+  textInput.hidden = false;
+  pendingBar.hidden = false;
+  textInput.focus();
+}
+
 function clearPending() {
   pendingBlob = null;
   pendingFilename = "";
+  pendingText = null;
   pendingBar.hidden = true;
   pendingPlayer.hidden = true;
   pendingPlayer.removeAttribute("src");
+  textInput.hidden = true;
+  textInput.value = "";
   if (objectUrl) {
     URL.revokeObjectURL(objectUrl);
     objectUrl = null;
@@ -293,20 +308,31 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
 });
 
+textBtn.addEventListener("click", () => {
+  setPendingText();
+});
+
 // ---------------------------------------------------------------------------
 // Send to the pipeline
 // ---------------------------------------------------------------------------
 
 async function sendPending() {
-  if (!pendingBlob) return;
+  if (!pendingBlob && !pendingText) return;
   const blob = pendingBlob;
   const filename = pendingFilename;
+  const text = textInput.value.trim();
   const lang = currentLang;
+  const isText = pendingText;
   clearPending();
 
   addBubble("user", (b) => {
-    addText(b, `Voice note (${LANG_NAMES[lang]}) — ${filename}`);
-    addMeta(b, "Sending…");
+    if (isText) {
+      addText(b, text);
+      addMeta(b, `Text (${LANG_NAMES[lang]})`);
+    } else {
+      addText(b, `Voice note (${LANG_NAMES[lang]}) — ${filename}`);
+      addMeta(b, "Sending…");
+    }
   });
 
   showTyping();
@@ -314,7 +340,11 @@ async function sendPending() {
 
   try {
     const form = new FormData();
-    form.append("file", blob, filename);
+    if (isText) {
+      form.append("transcript", text);
+    } else {
+      form.append("file", blob, filename);
+    }
     form.append("language", lang);
     const uid = localStorage.getItem(UID_KEY);
     if (uid) form.append("user_id", uid);
@@ -329,8 +359,8 @@ async function sendPending() {
 
     hideTyping();
     addBubble("user", (b) => {
-      addText(b, data.transcript || "(no transcript)");
-      addMeta(b, `${LANG_NAMES[lang]} · ${filename}`);
+      addText(b, data.transcript || text || "(no transcript)");
+      addMeta(b, `${LANG_NAMES[lang]}${isText ? "" : ` · ${filename}`}`);
     });
     addBubble("veyra", (b) => {
       addText(b, data.reply_text || "Done.");

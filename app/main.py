@@ -153,11 +153,12 @@ def _required_form(value: Optional[str], *, field: str) -> str:
 
 @app.post("/voice-note")
 async def voice_note(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    transcript: Optional[str] = Form(None),
     language: str = Form(...),
     user_id: Optional[str] = Form(None),
 ):
-    """Upload an audio file, get transcript + entries + 7-day summary."""
+    """Upload an audio file or transcript, get transcript + entries + 7-day summary."""
     try:
         from app.pipeline import process_voice_note
     except Exception as exc:  # pragma: no cover - environment dependent
@@ -167,6 +168,32 @@ async def voice_note(
         ) from exc
     lang = _required_form(language, field="language")
     uid = _safe_int_form(user_id, field="user_id")
+
+    # If transcript is provided, skip audio processing
+    if transcript:
+        try:
+            result = process_voice_note(
+                audio_path="",
+                language=lang,
+                user_id=uid,
+                transcript=transcript,
+            )
+            return JSONResponse(
+                {
+                    "user_id": result["user_id"],
+                    "transcript": result["transcript"],
+                    "entries": result["entries"],
+                    "summary": result["summary"],
+                    "reply_text": result["reply_text"],
+                    "language_notice": result.get("language_notice"),
+                }
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Otherwise process audio file
+    if not file:
+        raise HTTPException(status_code=400, detail="Either file or transcript is required")
 
     # Stream the upload into a temp file so `process_voice_note` (which expects
     # a filesystem path, needed for ffmpeg) can use it.

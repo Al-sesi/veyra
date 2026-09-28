@@ -15,6 +15,7 @@ services:
       - key: VEYRA_CORS_ORIGINS
         value: https://veyra-1.vercel.app
       - key: DATABASE_URL
+        value: postgresql://postgres.ropmzfftqbxkvsnwnyah:yAGYZ%3Fkm5R_TBTu@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
         sync: false
     healthCheckPath: /
     autoDeploy: true

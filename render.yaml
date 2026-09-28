@@ -13,7 +13,7 @@ services:
       - key: TRANSFORMERS_CACHE
         value: /tmp/hf-cache
       - key: VEYRA_CORS_ORIGINS
-        value: https://veyra-seven-beryl.vercel.app,https://veyra-api-lwzq.onrender.com
+        value: https://veyra-seven-beryl.vercel.app
       - key: DATABASE_URL
         sync: false
     healthCheckPath: /

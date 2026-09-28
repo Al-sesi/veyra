@@ -158,8 +158,8 @@ def warmup():
     try:
         from app.asr import load_essential_models, get_model_status
 
-        # Load English model
-        load_status = load_essential_models()
+        # Load English model with more retries for first-time loading
+        load_status = load_essential_models(max_retries=3, retry_delay=2.0)
         model_status = get_model_status()
 
         return {
@@ -172,6 +172,24 @@ def warmup():
         return {
             "service": "Veyra",
             "status": "warmup_failed",
+            "error": str(e),
+        }
+
+
+@app.get("/model-status")
+def model_status():
+    """Check if AI models are loaded without triggering downloads."""
+    try:
+        from app.asr import get_model_status
+        return {
+            "service": "Veyra",
+            "status": "ok",
+            **get_model_status(),
+        }
+    except Exception as e:
+        return {
+            "service": "Veyra",
+            "status": "error",
             "error": str(e),
         }
 

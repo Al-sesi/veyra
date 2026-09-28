@@ -16,11 +16,14 @@ unclear path writes NOTHING to the database.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Optional
 
 from app.asr import language_notice, transcribe
 from app.db import DEFAULT_DB_PATH
+
+logger = logging.getLogger("veyra.pipeline")
 from app.intents import (
     BUSINESS_INSIGHT_INTENT,
     CHECK_STOCK_INTENT,
@@ -198,9 +201,11 @@ def process_voice_note(
         except RuntimeError as e:
             # AI model loading failed - provide fallback guidance
             error_msg = str(e)
+            logger.warning(f"Voice transcription failed: {error_msg}")
             fallback_reply = (
                 f"Sorry, I'm having trouble with voice recognition right now. "
-                f"Please type your message instead, or try again in a moment. "
+                f"The AI model is still loading (this can take 1-2 minutes on first use). "
+                f"Please type your message instead, or try voice again in a moment. "
                 f"You can say things like: \"I sold rice 5k\" or \"I spent 2k on transport\"."
             )
             return _response(

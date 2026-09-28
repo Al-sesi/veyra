@@ -491,6 +491,27 @@ resetBookBtn.addEventListener("click", () => {
 // Connection check + initial paint
 // ---------------------------------------------------------------------------
 
+async function checkModelStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/model-status`);
+    const data = await res.json();
+    console.log("Model status:", data);
+    return data;
+  } catch (err) {
+    console.error("Failed to check model status:", err);
+    return null;
+  }
+}
+
 (async function init() {
   await refreshBook();
+
+  // Check if AI models are loaded
+  const modelStatus = await checkModelStatus();
+  if (modelStatus && modelStatus.cached_models && modelStatus.cached_models.length === 0) {
+    // Models not loaded yet, show warning
+    addBubble("veyra", (b) => {
+      addText(b, "Note: AI voice models are loading. First voice request may take 1-2 minutes. You can use text input in the meantime.");
+    });
+  }
 })();

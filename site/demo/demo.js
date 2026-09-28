@@ -8,11 +8,14 @@
  */
 
 const LOCAL_FALLBACK = "http://127.0.0.1:8000";
+const RENDER_BACKEND = "https://veyra-api-lwzq.onrender.com";
 const qs = new URLSearchParams(window.location.search);
 const API_BASE = (function () {
   if (qs.has("api")) return qs.get("api").replace(/\/+$/, "");
   if (window.location.protocol === "file:") return LOCAL_FALLBACK;
   const probe = window.location.origin;
+  // If accessing from Vercel deployment, use Render backend
+  if (probe.includes("vercel.app")) return RENDER_BACKEND;
   if (/127\.0\.0\.1|localhost/.test(probe) && window.location.port) {
     return probe;
   }

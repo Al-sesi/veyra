@@ -314,7 +314,7 @@ async function sendPending() {
 
   try {
     const form = new FormData();
-    form.append("audio", blob, filename);
+    form.append("file", blob, filename);
     form.append("language", lang);
     const uid = localStorage.getItem(UID_KEY);
     if (uid) form.append("user_id", uid);

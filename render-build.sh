@@ -5,6 +5,6 @@ echo "=== Veyra Render Build ==="
 
 echo "Installing Python dependencies..."
 pip install --no-cache-dir --upgrade pip
-pip install --no-cache-dir -r requirements-full.txt
+pip install --no-cache-dir -r requirements.txt
 
 echo "=== Build complete ==="

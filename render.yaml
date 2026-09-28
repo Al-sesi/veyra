@@ -18,3 +18,10 @@ services:
         sync: false
     healthCheckPath: /
     autoDeploy: true
+    # Keep-alive configuration for free tier
+    # Use uptime monitoring services like UptimeRobot, Pingdom, or Better Uptime
+    # to ping the /health endpoint every 5-10 minutes to prevent cold starts
+    # Example: https://your-render-url.onrender.com/health
+    # Also consider using https://uptimerobot.com/ for free monitoring
+    # Alternatively, call the /warmup endpoint after deployment:
+    # curl https://your-render-url.onrender.com/warmup

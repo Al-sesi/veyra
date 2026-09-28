@@ -193,7 +193,25 @@ def process_voice_note(
 
     notice_text = language_notice(language)
     if transcript is None:
-        transcript = transcribe(audio_path, language)
+        try:
+            transcript = transcribe(audio_path, language)
+        except RuntimeError as e:
+            # AI model loading failed - provide fallback guidance
+            error_msg = str(e)
+            fallback_reply = (
+                f"Sorry, I'm having trouble with voice recognition right now. "
+                f"Please type your message instead, or try again in a moment. "
+                f"You can say things like: \"I sold rice 5k\" or \"I spent 2k on transport\"."
+            )
+            return _response(
+                transcript="[Voice recognition unavailable]",
+                user_id=user_id,
+                db_path=db_path,
+                reply=fallback_reply,
+                entries=[],
+                saved=False,
+                language_notice_text=notice_text,
+            )
     intent = classify_message(transcript)
 
     # ------------------------------------------------------------------

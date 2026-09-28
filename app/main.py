@@ -91,7 +91,7 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
                 pass
     # Initialize database - init_db handles both SQLite and PostgreSQL based on DATABASE_URL
     init_db()
-    
+
     # Log which ffmpeg is being used for audio conversion
     try:
         from app.asr import _get_ffmpeg_path
@@ -102,6 +102,16 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
             logger.warning("No ffmpeg available - audio processing will fail")
     except Exception as e:
         logger.warning(f"Could not check ffmpeg availability: {e}")
+
+    # Preload all AI models to ensure all languages work immediately
+    try:
+        from app.asr import load_essential_models
+        logger.info("Preloading all AI models (English, Hausa, Igbo, Yoruba)...")
+        # Use fewer retries during startup to avoid excessive delays
+        load_status = load_essential_models(max_retries=2, retry_delay=1.0)
+        logger.info(f"Model loading complete: {load_status}")
+    except Exception as e:
+        logger.warning(f"Failed to preload AI models: {e}")
 
 
 @app.get("/")
@@ -126,6 +136,49 @@ def root():
             "POST /webhook",
         ],
     }
+
+
+@app.get("/health/deep")
+def deep_health():
+    """Deep health check that tests model loading - for monitoring and warmup."""
+    try:
+        from app.asr import get_model_status
+        model_status = get_model_status()
+        return {
+            "service": "Veyra",
+            "status": "ok",
+            **model_status,
+        }
+    except Exception as e:
+        return {
+            "service": "Veyra",
+            "status": "degraded",
+            "error": str(e),
+        }
+
+
+@app.get("/warmup")
+def warmup():
+    """Warmup endpoint to preload all AI models (English, Hausa, Igbo, Yoruba) - call this after deployment to avoid cold starts."""
+    try:
+        from app.asr import load_essential_models, get_model_status
+
+        # Load all models
+        load_status = load_essential_models()
+        model_status = get_model_status()
+
+        return {
+            "service": "Veyra",
+            "status": "warmed_up",
+            "load_status": load_status,
+            **model_status,
+        }
+    except Exception as e:
+        return {
+            "service": "Veyra",
+            "status": "warmup_failed",
+            "error": str(e),
+        }
 
 
 # ---------------------------------------------------------------------------

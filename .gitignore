@@ -11,3 +11,4 @@ ledger.db
 # Environment variables (API keys, DSNs, tokens).
 .env
 .env.local
+.vercel

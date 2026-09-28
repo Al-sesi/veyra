@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger("veyra.asr")
@@ -288,13 +289,18 @@ def _convert_to_wav_16k_mono(audio_path: str) -> str:
     return wav_path
 
 
-def _load_pipeline(lang_code: str):
+def _load_pipeline(lang_code: str, max_retries: int = 3, retry_delay: float = 2.0):
     """
     Load the ASR pipeline for ``lang_code`` or return a cached copy.
 
     Importing transformers/torch is deferred to here so that importing
     ``app.asr`` doesn't force 2+ GB of model libraries to load eagerly;
     the cold start cost is only paid on the first call to ``transcribe``.
+
+    Args:
+        lang_code: Language code to load model for
+        max_retries: Maximum number of retry attempts for model loading
+        retry_delay: Initial delay between retries in seconds (exponential backoff)
     """
     cfg = LANGUAGE_MODEL_CONFIG[lang_code]
     model_name = cfg["model"]
@@ -305,20 +311,86 @@ def _load_pipeline(lang_code: str):
     # Imported lazily -- they are heavy.
     from transformers import pipeline  # noqa: PLC0415
 
+    logger.info(f"Loading ASR model {model_name} for language {lang_code}...")
+
     # Exact usage pattern from all four NCAIR1 model cards ("Basic Usage"
     # section), e.g.:
     #   asr = pipeline("automatic-speech-recognition", model="NCAIR1/Hausa-ASR")
     # Every card caps inference at 30 s of audio, so chunk_length_s=30 both
     # follows the card and lets long voice notes run without raising
     # "more than 3000 mel input features".
-    pipe = pipeline(
-        task="automatic-speech-recognition",
-        model=model_name,
-        chunk_length_s=30,
-    )
 
-    _MODEL_CACHE[model_name] = pipe
-    return pipe
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            pipe = pipeline(
+                task="automatic-speech-recognition",
+                model=model_name,
+                chunk_length_s=30,
+            )
+            _MODEL_CACHE[model_name] = pipe
+            logger.info(f"Successfully loaded ASR model {model_name}")
+            return pipe
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                f"Attempt {attempt + 1}/{max_retries} failed to load model {model_name}: {e}"
+            )
+            if attempt < max_retries - 1:
+                wait_time = retry_delay * (2 ** attempt)  # Exponential backoff
+                logger.info(f"Retrying in {wait_time:.1f} seconds...")
+                time.sleep(wait_time)
+
+    # All retries failed
+    logger.error(f"Failed to load ASR model {model_name} after {max_retries} attempts")
+    raise RuntimeError(
+        f"Failed to load AI model for {cfg['display_name']}. "
+        f"This may be due to network issues or limited resources. "
+        f"Please try again or use text input instead."
+    ) from last_error
+
+
+def get_model_status() -> dict:
+    """
+    Return current model loading status for monitoring and debugging.
+    Useful for health checks and determining if models are ready.
+    """
+    return {
+        "cached_models": list(_MODEL_CACHE.keys()),
+        "total_languages": len(LANGUAGE_MODEL_CONFIG),
+        "total_unique_models": len(set(cfg["model"] for cfg in LANGUAGE_MODEL_CONFIG.values())),
+    }
+
+
+def load_essential_models(max_retries: int = 2, retry_delay: float = 1.0) -> dict:
+    """
+    Load the most commonly used models during startup to reduce cold start latency.
+    Returns status of loaded models.
+
+    Args:
+        max_retries: Maximum retry attempts for model loading during startup
+        retry_delay: Initial delay between retries in seconds
+    """
+    # Preload all 4 unique models to ensure all languages work immediately
+    # Note: "en" and "pcm" share the same model, so we only need to load "en"
+    essential_languages = ["en", "ha", "ig", "yo"]
+    loaded = []
+    failed = []
+
+    for lang in essential_languages:
+        try:
+            _load_pipeline(lang, max_retries=max_retries, retry_delay=retry_delay)
+            loaded.append(lang)
+            logger.info(f"Preloaded essential model for {lang}")
+        except Exception as e:
+            failed.append({"language": lang, "error": str(e)})
+            logger.warning(f"Failed to preload essential model for {lang}: {e}")
+
+    return {
+        "loaded": loaded,
+        "failed": failed,
+        "total_cached": len(_MODEL_CACHE),
+    }
 
 
 def _load_audio_array_16k(wav_path: str):

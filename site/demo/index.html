@@ -39,7 +39,6 @@
         <div class="chat-head">
           <div>
             <h1>Talk to Veyra</h1>
-            <p id="apiStatus" class="chat-status">Checking connection…</p>
           </div>
           <button id="resetBookBtn" class="btn btn-ghost btn-small" type="button" title="Start a fresh book in this browser">New book</button>
         </div>
@@ -47,7 +46,7 @@
         <div id="chatLog" class="chat-log" aria-live="polite">
           <div class="bubble bubble-veyra">
             <p class="bubble-name">Veyra</p>
-            <p>Sàlàm! Record a voice note or try a sample below. Say things like
+            <p>Sàlàm! Record a voice note. Say things like
             “I sold 5 bags of rice for ₦30,000” or “Bala owes me ₦2,000” —
             in Yorùbá, Hausa, Igbo or English.</p>
           </div>
@@ -68,16 +67,11 @@
             </button>
             <div class="record-side">
               <p id="recordHint" class="record-hint">Tap the mic and speak</p>
-              <div class="sample-row">
-                <span class="sample-label">Or try a sample:</span>
-                <button class="sample-btn" type="button" data-sample="samples/yoruba-1.ogg" data-name="yoruba-sample-1.ogg">Yorùbá 1</button>
-                <button class="sample-btn" type="button" data-sample="samples/yoruba-2.ogg" data-name="yoruba-sample-2.ogg">Yorùbá 2</button>
-                <button class="sample-btn" type="button" data-sample="samples/yoruba-3.ogg" data-name="yoruba-sample-3.ogg">Yorùbá 3</button>
-                <label class="sample-btn sample-upload">
-                  Upload
-                  <input id="fileInput" type="file" accept="audio/*" hidden />
-                </label>
-              </div>
+              <label class="sample-btn sample-upload">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13v-2H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11c.5-4.08 3.99-7.3 8.37-7.3 4.04 0 7.46 2.81 8.24 6.57l1.06.17c.95.15 1.65.99 1.65 1.95 0 1.1-.9 2-2 2H6v2h13v-2z"/></svg>
+                Upload audio
+                <input id="fileInput" type="file" accept="audio/*" hidden />
+              </label>
             </div>
           </div>
 

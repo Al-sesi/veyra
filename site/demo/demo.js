@@ -26,7 +26,6 @@ const UID_KEY = "veyra_demo_uid";
 const LANG_NAMES = { yo: "Yorùbá", ha: "Hausa", ig: "Igbo", en: "English", pcm: "Pidgin" };
 
 const chatLog = document.getElementById("chatLog");
-const apiStatus = document.getElementById("apiStatus");
 const micBtn = document.getElementById("micBtn");
 const recordHint = document.getElementById("recordHint");
 const fileInput = document.getElementById("fileInput");
@@ -192,8 +191,15 @@ function encodeWav(samples, sampleRate) {
 }
 
 async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const ctx = new AudioContext();
+  const stream = await navigator.mediaDevices.getUserMedia({ 
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 44100
+    }
+  });
+  const ctx = new AudioContext({ sampleRate: 44100 });
   const source = ctx.createMediaStreamSource(stream);
   const processor = ctx.createScriptProcessor(4096, 1, 1);
   const chunks = [];
@@ -222,7 +228,15 @@ async function stopRecording() {
     merged.set(c, at);
     at += c.length;
   }
-  return encodeWav(merged, ctx.sampleRate);
+  // Resample to 16kHz for better compatibility
+  const targetRate = 16000;
+  const originalRate = 44100;
+  const resampled = new Float32Array(Math.floor(merged.length * targetRate / originalRate));
+  for (let i = 0; i < resampled.length; i++) {
+    const srcIdx = Math.floor(i * originalRate / targetRate);
+    resampled[i] = merged[srcIdx];
+  }
+  return encodeWav(resampled, targetRate);
 }
 
 micBtn.addEventListener("click", async () => {
@@ -248,7 +262,7 @@ micBtn.addEventListener("click", async () => {
     recordHint.classList.add("is-recording");
     recordHint.textContent = "Recording… tap again to stop";
   } catch {
-    addErrorBubble("Microphone unavailable. Check the browser permission, or use a sample / upload instead.");
+    addErrorBubble("Microphone unavailable. Check the browser permission, or upload an audio file instead.");
   }
 });
 
@@ -269,24 +283,8 @@ document.querySelectorAll(".lang-pill").forEach((pill) => {
 });
 
 // ---------------------------------------------------------------------------
-// Samples + file upload
+// File upload
 // ---------------------------------------------------------------------------
-
-document.querySelectorAll(".sample-btn[data-sample]").forEach((btn) => {
-  btn.addEventListener("click", async () => {
-    btn.disabled = true;
-    try {
-      const res = await fetch(btn.dataset.sample);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      setPending(blob, btn.dataset.name);
-    } catch {
-      addErrorBubble("Could not load the sample clip. Is the site being served from site/ (so samples/ exists)?");
-    } finally {
-      btn.disabled = false;
-    }
-  });
-});
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];
@@ -316,7 +314,7 @@ async function sendPending() {
 
   try {
     const form = new FormData();
-    form.append("file", blob, filename);
+    form.append("audio", blob, filename);
     form.append("language", lang);
     const uid = localStorage.getItem(UID_KEY);
     if (uid) form.append("user_id", uid);
@@ -458,14 +456,5 @@ resetBookBtn.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 
 (async function init() {
-  try {
-    const res = await fetch(`${API_BASE}/ledger/1?limit=1`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    apiStatus.textContent = "Connected — speak in your language";
-    apiStatus.classList.add("is-ok");
-  } catch {
-    apiStatus.textContent = `API offline (${API_BASE}) — start: python -m uvicorn app.main:app --port 8000`;
-    apiStatus.classList.add("is-bad");
-  }
   await refreshBook();
 })();

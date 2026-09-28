@@ -103,15 +103,10 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
     except Exception as e:
         logger.warning(f"Could not check ffmpeg availability: {e}")
 
-    # Preload all AI models to ensure all languages work immediately
-    try:
-        from app.asr import load_essential_models
-        logger.info("Preloading all AI models (English, Hausa, Igbo, Yoruba)...")
-        # Use fewer retries during startup to avoid excessive delays
-        load_status = load_essential_models(max_retries=2, retry_delay=1.0)
-        logger.info(f"Model loading complete: {load_status}")
-    except Exception as e:
-        logger.warning(f"Failed to preload AI models: {e}")
+    # Skip automatic model loading during startup to prevent 502 errors on free tier
+    # Models will load on-demand when users make requests
+    # Call /warmup endpoint manually if you want to preload models
+    logger.info("Skipping automatic model loading to prevent startup timeout")
 
 
 @app.get("/")
@@ -159,11 +154,11 @@ def deep_health():
 
 @app.get("/warmup")
 def warmup():
-    """Warmup endpoint to preload all AI models (English, Hausa, Igbo, Yoruba) - call this after deployment to avoid cold starts."""
+    """Warmup endpoint to preload English model - call this after deployment to avoid cold starts."""
     try:
         from app.asr import load_essential_models, get_model_status
 
-        # Load all models
+        # Load English model
         load_status = load_essential_models()
         model_status = get_model_status()
 

@@ -371,9 +371,9 @@ def load_essential_models(max_retries: int = 2, retry_delay: float = 1.0) -> dic
         max_retries: Maximum retry attempts for model loading during startup
         retry_delay: Initial delay between retries in seconds
     """
-    # Preload all 4 unique models to ensure all languages work immediately
-    # Note: "en" and "pcm" share the same model, so we only need to load "en"
-    essential_languages = ["en", "ha", "ig", "yo"]
+    # Preload only English initially to avoid crashing free tier
+    # Other languages will load on-demand when needed
+    essential_languages = ["en"]
     loaded = []
     failed = []
 

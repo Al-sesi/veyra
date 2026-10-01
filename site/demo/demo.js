@@ -108,8 +108,11 @@ function addEntryChips(bubble, entries) {
   for (const e of entries) {
     const li = el("li");
     const qty = e.quantity ? `${e.quantity} × ` : "";
-    li.appendChild(el("span", null, `${qty}${e.item} (${e.type})`));
-    li.appendChild(el("strong", null, fmtNaira(e.amount)));
+    const item = e.item || "Unknown item";
+    const type = e.type || "unknown";
+    const amount = e.amount !== null && e.amount !== undefined ? e.amount : 0;
+    li.appendChild(el("span", null, `${qty}${item} (${type})`));
+    li.appendChild(el("strong", null, fmtNaira(amount)));
     ul.appendChild(li);
   }
   bubble.appendChild(ul);
@@ -417,7 +420,8 @@ function renderDebts(debts) {
   for (const d of debts) {
     const li = el("li");
     const main = el("span", "b-main");
-    main.appendChild(el("span", "b-desc", d.person));
+    const person = d.person || "Unknown person";
+    main.appendChild(el("span", "b-desc", person));
     main.appendChild(el("span", "b-time", d.direction === "owed_to_me" ? "owes you" : "you owe"));
     li.appendChild(main);
     li.appendChild(el("strong", "b-amt " + (d.direction === "owed_to_me" ? "is-income" : "is-expense"), fmtNaira(d.amount)));
@@ -435,7 +439,8 @@ function renderEntries(entries) {
     const li = el("li");
     const main = el("span", "b-main");
     const qty = e.quantity ? `${e.quantity} × ` : "";
-    main.appendChild(el("span", "b-desc", `${qty}${e.item}${e.status === "voided" ? " (voided)" : ""}`));
+    const item = e.item || "Unknown item";
+    main.appendChild(el("span", "b-desc", `${qty}${item}${e.status === "voided" ? " (voided)" : ""}`));
     main.appendChild(el("span", "b-time", fmtTime(e.created_at)));
     li.appendChild(main);
     li.appendChild(el("strong", `b-amt is-${e.type}`, fmtNaira(e.amount)));

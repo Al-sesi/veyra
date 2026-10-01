@@ -327,7 +327,7 @@ async function sendPending() {
       addText(b, text);
       addMeta(b, `Text (${LANG_NAMES[lang]})`);
     } else {
-      addText(b, `Voice note (${LANG_NAMES[lang]}) — ${filename}`);
+      addText(b, "Recording");
       addMeta(b, "Sending…");
     }
   });
@@ -357,7 +357,7 @@ async function sendPending() {
     hideTyping();
     addBubble("user", (b) => {
       addText(b, data.transcript || text || "(no transcript)");
-      addMeta(b, `${LANG_NAMES[lang]}${isText ? "" : ` · ${filename}`}`);
+      addMeta(b, LANG_NAMES[lang]);
     });
     addBubble("veyra", (b) => {
       addText(b, data.reply_text || "Done.");

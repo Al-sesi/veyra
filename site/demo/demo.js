@@ -45,6 +45,8 @@ const bookContent = document.getElementById("bookContent");
 const bookTotals = document.getElementById("bookTotals");
 const bookDebts = document.getElementById("bookDebts");
 const bookEntries = document.getElementById("bookEntries");
+const bookCard = document.querySelector(".book-card");
+const bookOverlay = document.getElementById("bookOverlay");
 
 let currentLang = "en"; // Default to English since language selection is removed
 let pendingBlob = null;
@@ -248,8 +250,6 @@ async function stopRecording() {
 micBtn.addEventListener("click", async () => {
   if (recorder) {
     micBtn.classList.remove("is-recording");
-    recordHint.classList.remove("is-recording");
-    recordHint.textContent = "Tap the mic and speak";
     micBtn.disabled = true;
     try {
       const blob = await stopRecording();
@@ -265,8 +265,6 @@ micBtn.addEventListener("click", async () => {
   try {
     await startRecording();
     micBtn.classList.add("is-recording");
-    recordHint.classList.add("is-recording");
-    recordHint.textContent = "Recording… tap again to stop";
   } catch {
     addErrorBubble("Microphone unavailable. Check the browser permission, or upload an audio file instead.");
   }
@@ -296,7 +294,6 @@ textInput.addEventListener("keydown", (e) => {
 
 sendBtn.addEventListener("click", () => {
   sendPending();
-});
 });
 
 // ---------------------------------------------------------------------------
@@ -481,6 +478,41 @@ resetBookBtn.addEventListener("click", () => {
   refreshBook();
   addBubble("veyra", (b) => addText(b, "Fresh book started. Your next voice note opens a new one."));
 });
+
+// Mobile book panel toggle
+const bookToggleBtn = document.getElementById("bookToggleBtn");
+const bookCloseBtn = document.getElementById("bookCloseBtn");
+
+function toggleBookPanel(show) {
+  if (show) {
+    bookCard.classList.add("is-visible");
+    bookOverlay.classList.add("is-visible");
+    bookToggleBtn.classList.add("is-active");
+  } else {
+    bookCard.classList.remove("is-visible");
+    bookOverlay.classList.remove("is-visible");
+    bookToggleBtn.classList.remove("is-active");
+  }
+}
+
+if (bookToggleBtn) {
+  bookToggleBtn.addEventListener("click", () => {
+    const isVisible = bookCard.classList.contains("is-visible");
+    toggleBookPanel(!isVisible);
+  });
+}
+
+if (bookCloseBtn) {
+  bookCloseBtn.addEventListener("click", () => {
+    toggleBookPanel(false);
+  });
+}
+
+if (bookOverlay) {
+  bookOverlay.addEventListener("click", () => {
+    toggleBookPanel(false);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Connection check + initial paint

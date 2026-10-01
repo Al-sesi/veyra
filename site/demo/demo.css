@@ -23,6 +23,10 @@
   padding: 0.28rem 0.7rem; border-radius: 999px;
 }
 
+.header-inner {
+  padding: 0.75rem 1rem;
+}
+
 .demo-main {
   display: grid;
   grid-template-columns: 1fr;
@@ -51,6 +55,7 @@
   display: flex;
   flex-direction: column;
   height: calc(100vh - 60px);
+  min-height: calc(100dvh - 60px);
 }
 
 .chat-head {
@@ -61,10 +66,45 @@
   border-bottom: 1px solid #00a884;
 }
 
-.chat-head h1 { 
-  font-size: 1rem; 
-  color: #fff; 
+.chat-head h1 {
+  font-size: 1rem;
+  color: #fff;
   font-weight: 600;
+  margin: 0;
+}
+
+.chat-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.book-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.2s ease;
+}
+
+.book-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.book-toggle-btn svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+@media (min-width: 1024px) {
+  .book-toggle-btn {
+    display: none;
+  }
 }
 
 /* ---------------- Chat log ---------------- */
@@ -357,13 +397,14 @@
 
 /* ---------------- Compact book panel ---------------- */
 
-.book-card { 
+.book-card {
   background: #fff;
   border: none;
   border-radius: 0;
   box-shadow: none;
   overflow: hidden;
   height: calc(100vh - 60px);
+  min-height: calc(100dvh - 60px);
   border-left: 1px solid #e9edef;
 }
 
@@ -470,15 +511,206 @@
   display: none;
 }
 
+/* Mobile: Add toggle button for book panel */
 @media (max-width: 1023px) {
-  .chat-card { height: calc(100vh - 60px); }
-  .book-card { display: none; }
+  .chat-card {
+    height: calc(100dvh - 60px);
+  }
+
+  .book-card {
+    display: none;
+    position: fixed;
+    top: 60px;
+    right: 0;
+    width: 100%;
+    max-width: 400px;
+    height: calc(100dvh - 60px);
+    z-index: 100;
+    border-left: none;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.15);
+  }
+
+  .book-card.is-visible {
+    display: block;
+  }
+
+  .book-toggle-btn {
+    display: grid;
+  }
+
+  .book-toggle-btn.is-active {
+    background: rgba(220, 38, 38, 0.8);
+  }
+
+  /* Add close button to book panel on mobile */
+  .book-head {
+    position: relative;
+    padding-right: 3.5rem;
+  }
+
+  .book-close-btn {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.1);
+    color: #54656f;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 1.2rem;
+    transition: background 0.2s ease;
+  }
+
+  .book-close-btn:hover {
+    background: rgba(0,0,0,0.15);
+  }
+
+  /* Overlay to close book when clicking outside */
+  .book-overlay {
+    display: none;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+  }
+
+  .book-overlay.is-visible {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .book-close-btn {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
-  .chat-log { height: calc(100vh - 200px); }
-  .bubble { max-width: 85%; }
-  .record-row { padding: 0.4rem; }
-  .mic-btn { width: 40px; height: 40px; }
-  .mic-btn svg { width: 1.2rem; height: 1.2rem; }
+  .chat-log {
+    padding: 0.75rem;
+  }
+
+  .bubble {
+    max-width: 90%;
+    padding: 0.6rem 0.85rem;
+  }
+
+  .bubble p {
+    font-size: 0.95rem;
+  }
+
+  .bubble-name {
+    font-size: 0.7rem;
+  }
+
+  .composer {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .input-wrapper {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .mic-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .mic-btn svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .icon-btn svg {
+    width: 1.3rem;
+    height: 1.3rem;
+  }
+
+  .send-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .send-btn svg {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .text-input {
+    font-size: 1rem;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .chat-head h1 {
+    font-size: 0.95rem;
+  }
+
+  .header-inner {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .btn-small {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  .pending-bar {
+    padding: 0.6rem 0.85rem;
+  }
+
+  #pendingName {
+    font-size: 0.85rem;
+  }
+
+  #pendingPlayer {
+    height: 32px;
+  }
+
+  /* Better mobile header spacing */
+  .demo-header {
+    height: 60px;
+  }
+
+  .chat-head {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .chat-head-actions {
+    gap: 0.4rem;
+  }
+
+  .book-toggle-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .book-toggle-btn svg {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  /* Full width book panel on very small screens */
+  .book-card {
+    max-width: 100%;
+  }
+
+  /* Adjust book close button for mobile */
+  .book-close-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 1rem;
+  }
 }

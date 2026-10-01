@@ -53,28 +53,18 @@
         </div>
 
         <div class="composer">
-          <div class="lang-row" role="radiogroup" aria-label="Language">
-            <button class="lang-pill is-active" type="button" data-lang="yo" role="radio" aria-checked="true">Yorùbá</button>
-            <button class="lang-pill" type="button" data-lang="ha" role="radio" aria-checked="false">Hausa</button>
-            <button class="lang-pill" type="button" data-lang="ig" role="radio" aria-checked="false">Igbo</button>
-            <button class="lang-pill" type="button" data-lang="en" role="radio" aria-checked="false">English</button>
-            <button class="lang-pill" type="button" data-lang="pcm" role="radio" aria-checked="false">Pidgin <span class="pill-beta">Beta</span></button>
-          </div>
-
-          <div class="record-row">
+          <div class="input-wrapper">
             <button id="micBtn" class="mic-btn" type="button" aria-label="Record a voice note">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
             </button>
-            <div class="record-side">
-              <p id="recordHint" class="record-hint">Tap the mic and speak</p>
-              <label class="sample-btn sample-upload">
+            <textarea id="textInput" class="text-input" placeholder="Type your message here..."></textarea>
+            <div class="action-buttons">
+              <label class="icon-btn upload-btn" title="Upload audio">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13v-2H6c-2.21 0-4-1.79-4-4 0-2.05 1.53-3.76 3.56-3.97l1.07-.11c.5-4.08 3.99-7.3 8.37-7.3 4.04 0 7.46 2.81 8.24 6.57l1.06.17c.95.15 1.65.99 1.65 1.95 0 1.1-.9 2-2 2H6v2h13v-2z"/></svg>
-                Upload audio
                 <input id="fileInput" type="file" accept="audio/*" hidden />
               </label>
-              <button id="textBtn" class="sample-btn" type="button">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                Type text
+              <button id="sendBtn" class="send-btn" type="button" aria-label="Send message">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
               </button>
             </div>
           </div>
@@ -82,8 +72,6 @@
           <div id="pendingBar" class="pending-bar" hidden>
             <span id="pendingName"></span>
             <audio id="pendingPlayer" controls hidden></audio>
-            <textarea id="textInput" class="text-input" placeholder="Type your message here..." hidden></textarea>
-            <button id="sendBtn" class="btn btn-primary btn-small" type="button">Send to Veyra</button>
             <button id="discardBtn" class="btn btn-ghost btn-small" type="button">Discard</button>
           </div>
         </div>

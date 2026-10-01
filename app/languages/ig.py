@@ -53,6 +53,16 @@ IGBO_PACK: Dict[str, Any] = {
     "delete_last": [_fold(p) for p in [
         "hichapụ nke ikpeazụ", "wepụ nke ikpeazụ", "kagbuo nke ikpeazụ",
     ]],
+    "request_history": [_fold(p) for p in [
+        "gosi akwụkwọ m", "zipụta akwụkwọ ndebi m", "gosi m akwụkwọ ndebi m",
+        "kewapụ m akwụkwọ m", "chie m akwụkwọ m", "bịa m akwụkwọ m",
+        "m chọrọ akwụkwọ m", "m chọrọ akwụkwọ ndebi m",
+        "gosi m ndekọ m", "zipụta m ndekọ m", "bịa m ndekọ m",
+        "ihe m debere", "ihe m dere", "ndekọ m", "akwụkwọ m",
+        "akwụkwọ ndebi m", "chie m", "gosi m", "zipụta m",
+        "ka m hụ ihe m dere", "ka m hụ ihe m debere",
+        "bịa m ihe m mere", "gosi m ihe m mere",
+    ]],
     "number_words": {
         "otu": 1, "abuo": 2, "ato": 3, "ano": 4, "ise": 5,
         "isii": 6, "asaa": 7, "asato": 8, "itoolu": 9, "iri": 10,

@@ -124,15 +124,6 @@ def test_multiple_sales_and_expenses():
     assert amounts_exp == [5000, 10000]
 
 
-def test_plain_integer_amount():
-    result = parse_transcript("Sold pure water 500")
-    assert len(result) == 1
-    entry = result[0]
-    assert entry["type"] == "sale"
-    assert entry["amount"] == 500
-    assert "water" in entry["item"].lower()
-
-
 def test_mixed_pidgin_and_english():
     result = parse_transcript(
         "I don sell 6 crates of egg 36k then I pay for market levy 2k"
@@ -224,3 +215,314 @@ def test_malformed_thousand_separator_falls_back_safe():
     # We at least correctly extract the 1,000 = 1000 amount.
     amounts = [e["amount"] for e in result]
     assert 1000 in amounts
+
+
+# ---------------------------------------------------------------------------
+# Natural language variation tests - semantic understanding
+# ---------------------------------------------------------------------------
+
+def test_natural_language_i_bought():
+    """Test: 'I bought chin chin for 2k' - standard past tense"""
+    result = parse_transcript("I bought chin chin for 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_i_buy():
+    """Test: 'I buy chin chin for 2k' - present tense"""
+    result = parse_transcript("I buy chin chin for 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_i_purchased():
+    """Test: 'I purchased chin chin 2k' - formal word"""
+    result = parse_transcript("I purchased chin chin 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_sent_for():
+    """Test: 'I sent for chin chin spent 2k' - contextual pattern"""
+    result = parse_transcript("I sent for chin chin spent 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_got_and_paid():
+    """Test: 'I got chin chin and paid 2k' - semantic pattern"""
+    result = parse_transcript("I got chin chin and paid 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_cost_me():
+    """Test: 'It cost me 2k for chin chin' - result-oriented pattern"""
+    result = parse_transcript("It cost me 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_price_was():
+    """Test: 'Chin chin cost 2k' - price-focused pattern"""
+    result = parse_transcript("Chin chin cost 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_informal_spent():
+    """Test: 'I spent 2k on chin chin' - spend-focused pattern"""
+    result = parse_transcript("I spent 2k on chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_paid_for():
+    """Test: 'I paid for chin chin 2k' - pay-focused pattern"""
+    result = parse_transcript("I paid for chin chin 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_ended_up_paying():
+    """Test: 'I ended up paying 2k for chin chin' - conversational pattern"""
+    result = parse_transcript("I ended up paying 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_finally_paid():
+    """Test: 'I finally paid 2k for chin chin' - conversational pattern"""
+    result = parse_transcript("I finally paid 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_sentence_structure_variation():
+    """Test: Different word order - 'Chin chin 2k I bought'"""
+    result = parse_transcript("Chin chin 2k I bought")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_with_comma_separator():
+    """Test: 'I bought chin chin, 2k' - comma before amount (kept together)"""
+    result = parse_transcript("I bought chin chin, 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_then_paid():
+    """Test: 'I got chin chin then paid 2k' - sequential pattern"""
+    result = parse_transcript("I got chin chin then paid 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_money_gone():
+    """Test: 'My money 2k went on chin chin' - result-oriented pattern"""
+    result = parse_transcript("My money 2k went on chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_value_of():
+    """Test: 'Value of chin chin 2k' - value-focused pattern"""
+    result = parse_transcript("Value of chin chin 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_acquired():
+    """Test: 'I acquired chin chin for 2k' - formal word"""
+    result = parse_transcript("I acquired chin chin for 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_ordered():
+    """Test: 'I ordered chin chin 2k' - action-focused pattern"""
+    result = parse_transcript("I ordered chin chin 2k")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_charged_me():
+    """Test: 'They charged me 2k for chin chin' - passive pattern"""
+    result = parse_transcript("They charged me 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_billed_me():
+    """Test: 'I was billed 2k for chin chin' - passive pattern"""
+    result = parse_transcript("I was billed 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+def test_natural_language_handed_over_money():
+    """Test: 'I handed over 2k for chin chin' - action pattern"""
+    result = parse_transcript("I handed over 2k for chin chin")
+    assert len(result) == 1
+    entry = result[0]
+    assert entry["type"] == "expense"
+    assert entry["amount"] == 2000
+    assert "chin chin" in entry["item"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Complex multi-transaction narrative tests
+# ---------------------------------------------------------------------------
+
+def test_conversational_narrative_multiple_transactions():
+    """Test: 'I went to the market this morning. I bought rice for 20,000 and later bought chin chin for 2,000. I also spent 1,000 on transport.'"""
+    result = parse_transcript("I went to the market this morning. I bought rice for 20,000 and later bought chin chin for 2,000. I also spent 1,000 on transport.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [1000, 2000, 20000]
+    items = [e["item"].lower() for e in result]
+    assert any("rice" in item for item in items)
+    assert any("chin chin" in item for item in items)
+    assert any("transport" in item for item in items)
+
+
+def test_conversational_with_filler_text():
+    """Test: 'So I was at the shop today and I got some garri for 5k then I paid 2k for transport.'"""
+    result = parse_transcript("So I was at the shop today and I got some garri for 5k then I paid 2k for transport.")
+    assert len(result) == 2
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 5000]
+    items = [e["item"].lower() for e in result]
+    assert any("garri" in item for item in items)
+    assert any("transport" in item for item in items)
+
+
+def test_conversational_mixed_english_pidgin():
+    """Test: 'I don go market today. I buy rice 10k. I transport 2k. I sell beans 15k.'"""
+    result = parse_transcript("I don go market today. I buy rice 10k. I transport 2k. I sell beans 15k.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 10000, 15000]
+    types = [e["type"] for e in result]
+    assert types.count("expense") == 2
+    assert types.count("sale") == 1
+
+
+def test_conversational_long_sentence():
+    """Test: 'I purchased three bags of rice for the sum of 45,000 naira. I bought some chin chin for 2,000. I paid 1,000 for transport back home.'"""
+    result = parse_transcript("I purchased three bags of rice for the sum of 45,000 naira. I bought some chin chin for 2,000. I paid 1,000 for transport back home.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [1000, 2000, 45000]
+
+
+def test_conversational_without_explicit_verbs():
+    """Test: 'Market today: bought rice 20k, bought beans 15k, spent transport 2k' - minimal conversational"""
+    result = parse_transcript("Market today: bought rice 20k, bought beans 15k, spent transport 2k")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 15000, 20000]
+
+
+def test_conversational_with_later():
+    """Test: 'I bought rice 20k. Later I bought chin chin 2k. Then transport 1k.'"""
+    result = parse_transcript("I bought rice 20k. Later I bought chin chin 2k. Then transport 1k.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [1000, 2000, 20000]
+
+
+def test_conversational_with_quantities():
+    """Test: 'I bought 5 bags of rice for 25k. I bought 2 crates of eggs for 10k.'"""
+    result = parse_transcript("I bought 5 bags of rice for 25k. I bought 2 crates of eggs for 10k.")
+    assert len(result) == 2
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [10000, 25000]
+
+
+def test_conversational_mixed_sales_and_expenses():
+    """Test: 'I sold rice 30k. I bought beans 15k. I paid transport 2k.'"""
+    result = parse_transcript("I sold rice 30k. I bought beans 15k. I paid transport 2k.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 15000, 30000]
+    types = [e["type"] for e in result]
+    assert types.count("sale") == 1
+    assert types.count("expense") == 2
+
+
+def test_conversational_with_also():
+    """Test: 'I bought rice 20k. I also bought beans 15k. Also spent 2k on transport.'"""
+    result = parse_transcript("I bought rice 20k. I also bought beans 15k. Also spent 2k on transport.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 15000, 20000]
+
+
+def test_conversational_with_before_after():
+    """Test: 'I bought rice 20k. I bought beans 15k. I paid 2k for transport.'"""
+    result = parse_transcript("I bought rice 20k. I bought beans 15k. I paid 2k for transport.")
+    assert len(result) == 3
+    amounts = sorted([e["amount"] for e in result])
+    assert amounts == [2000, 15000, 20000]

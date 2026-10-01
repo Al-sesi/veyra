@@ -123,6 +123,7 @@ def root():
             "GET  / (health check)",
             "GET  /health (health check)",
             "POST /voice-note",
+            "POST /text-message",
             "GET  /ledger/{user_id}",
             "GET  /ledger/{phone_number}.xlsx",
             "GET  /summary/{user_id}",
@@ -221,22 +222,33 @@ def _required_form(value: Optional[str], *, field: str) -> str:
 async def voice_note(
     file: Optional[UploadFile] = File(None),
     transcript: Optional[str] = Form(None),
-    language: str = Form(...),
+    language: Optional[str] = Form(None),
     user_id: Optional[str] = Form(None),
 ):
-    """Upload an audio file or transcript, get transcript + entries + 7-day summary."""
+    """Upload an audio file or transcript, get transcript + entries + 7-day summary.
+    
+    Language is optional - if not provided, it will be auto-detected from the transcript
+    (for text input) or from the transcribed audio (for voice input).
+    """
     try:
         from app.pipeline import process_voice_note
+        from app.asr import detect_language_from_text  # noqa: PLC0415
     except Exception as exc:  # pragma: no cover - environment dependent
         raise HTTPException(
             status_code=503,
             detail=f"Voice-note ASR pipeline is not available in this deployment ({exc.__class__.__name__}: {exc}). Use the text-only endpoints or deploy with ASR dependencies.",
         ) from exc
-    lang = _required_form(language, field="language")
+    
     uid = _safe_int_form(user_id, field="user_id")
-
+    
     # If transcript is provided, skip audio processing
     if transcript:
+        # Auto-detect language if not provided
+        if language is None:
+            lang = detect_language_from_text(transcript)
+        else:
+            lang = language
+        
         try:
             result = process_voice_note(
                 audio_path="",
@@ -252,6 +264,7 @@ async def voice_note(
                     "summary": result["summary"],
                     "reply_text": result["reply_text"],
                     "language_notice": result.get("language_notice"),
+                    "detected_language": lang,
                 }
             )
         except ValueError as exc:
@@ -260,6 +273,10 @@ async def voice_note(
     # Otherwise process audio file
     if not file:
         raise HTTPException(status_code=400, detail="Either file or transcript is required")
+
+    # For audio, use provided language or default to English
+    # The ASR will transcribe in that language, and we can re-detect after if needed
+    lang = language if language else "en"
 
     # Stream the upload into a temp file so `process_voice_note` (which expects
     # a filesystem path, needed for ffmpeg) can use it.
@@ -285,6 +302,7 @@ async def voice_note(
                 "summary": result["summary"],
                 "reply_text": result["reply_text"],
                 "language_notice": result.get("language_notice"),
+                "detected_language": lang,
             }
         )
     except FileNotFoundError as exc:
@@ -295,6 +313,67 @@ async def voice_note(
     finally:
         if tmp_path.exists():
             tmp_path.unlink(missing_ok=True)
+
+
+@app.post("/text-message")
+async def text_message(
+    text: str = Form(...),
+    language: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+):
+    """Submit a text message directly (no audio), get entries + 7-day summary.
+    
+    This is a dedicated endpoint for text-only input, supporting:
+    - English, Nigerian Pidgin, Yoruba, Hausa, Igbo
+    
+    Language is optional - if not provided, it will be auto-detected from the text.
+    
+    Example requests:
+    - English: text="I bought rice for 5000", language="en" (or omit language)
+    - Pidgin: text="I buy rice 5k", language="pcm" (or omit language)
+    - Yoruba: text="Mo ra iresi fun 5000", language="yo" (or omit language)
+    - Hausa: text="Na saya shinkafa 5k", language="ha" (or omit language)
+    - Igbo: text="M zụrọ osikapa 5k", language="ig" (or omit language)
+    
+    The text goes through the same extraction and transaction pipeline as voice input.
+    """
+    try:
+        from app.pipeline import process_voice_note
+        from app.asr import detect_language_from_text  # noqa: PLC0415
+    except Exception as exc:  # pragma: no cover - environment dependent
+        raise HTTPException(
+            status_code=503,
+            detail=f"Pipeline is not available in this deployment ({exc.__class__.__name__}: {exc}).",
+        ) from exc
+    
+    uid = _safe_int_form(user_id, field="user_id")
+    
+    # Auto-detect language if not provided
+    if language is None:
+        lang = detect_language_from_text(text)
+    else:
+        lang = language
+    
+    try:
+        result = process_voice_note(
+            audio_path="",
+            language=lang,
+            user_id=uid,
+            transcript=text,
+        )
+        return JSONResponse(
+            {
+                "user_id": result["user_id"],
+                "transcript": result["transcript"],
+                "entries": result["entries"],
+                "summary": result["summary"],
+                "reply_text": result["reply_text"],
+                "language_notice": result.get("language_notice"),
+                "detected_language": lang,
+            }
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/ledger/{phone_number}.xlsx")
@@ -401,6 +480,7 @@ def _handle_whatsapp_message(item: dict[str, Any]) -> None:
     """Process one parsed WhatsApp message and reply via the Cloud API."""
     from app import whatsapp  # noqa: PLC0415 (kept import-time cheap, patchable in tests)
     from app.pipeline import process_voice_note  # noqa: PLC0415
+    from app.asr import detect_language_from_text  # noqa: PLC0415
 
     phone = item["phone"]
     try:
@@ -422,13 +502,24 @@ def _handle_whatsapp_message(item: dict[str, Any]) -> None:
             whatsapp.send_message(
                 phone,
                 f"Thank you! Veyra will use {display} for your account. "
+                "You can switch languages anytime — just send messages in Yoruba, "
+                "Hausa, Igbo, Pidgin, or English and I'll understand. "
                 "Send a voice note or a text to log a sale or expense — "
                 'for example "I sold rice 5k".',
             )
             return
 
         user_id = int(user["id"])
-        language = user.get("language") or "en"
+        
+        # Auto-detect language from the message text/transcript
+        # For audio, we'll detect after transcription, but for text messages we can detect now
+        if item.get("type") == "text":
+            message_text = item.get("text") or ""
+            language = detect_language_from_text(message_text)
+        else:
+            # For audio, use user's stored language as initial hint
+            # The ASR model will use this, but we'll re-detect after transcription
+            language = user.get("language") or "en"
 
         if item.get("type") in whatsapp.SUPPORTED_MEDIA_TYPES:
             audio_bytes = whatsapp.download_media(item["media_id"])

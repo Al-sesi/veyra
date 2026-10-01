@@ -20,3 +20,6 @@ imageio-ffmpeg==0.5.1
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.4.1
 torchaudio==2.4.1
+
+# LLM fallback parser using Google Gemini 2.5 Flash-Lite
+google-generativeai==0.8.3

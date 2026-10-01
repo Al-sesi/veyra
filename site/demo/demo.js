@@ -31,9 +31,7 @@ const LANG_NAMES = { yo: "Yorùbá", ha: "Hausa", ig: "Igbo", en: "English", pcm
 
 const chatLog = document.getElementById("chatLog");
 const micBtn = document.getElementById("micBtn");
-const recordHint = document.getElementById("recordHint");
 const fileInput = document.getElementById("fileInput");
-const textBtn = document.getElementById("textBtn");
 const pendingBar = document.getElementById("pendingBar");
 const pendingName = document.getElementById("pendingName");
 const pendingPlayer = document.getElementById("pendingPlayer");
@@ -48,10 +46,9 @@ const bookTotals = document.getElementById("bookTotals");
 const bookDebts = document.getElementById("bookDebts");
 const bookEntries = document.getElementById("bookEntries");
 
-let currentLang = "yo";
+let currentLang = "en"; // Default to English since language selection is removed
 let pendingBlob = null;
 let pendingFilename = "";
-let pendingText = null;
 let recorder = null; // {stream, ctx, source, processor, chunks}
 let objectUrl = null;
 
@@ -151,25 +148,15 @@ function setPending(blob, filename) {
   pendingPlayer.src = objectUrl;
   pendingPlayer.hidden = false;
   pendingBar.hidden = false;
-}
-
-function setPendingText() {
-  clearPending();
-  pendingText = true;
-  pendingName.textContent = "Text message";
-  textInput.hidden = false;
-  pendingBar.hidden = false;
-  textInput.focus();
+  textInput.value = "";
 }
 
 function clearPending() {
   pendingBlob = null;
   pendingFilename = "";
-  pendingText = null;
   pendingBar.hidden = true;
   pendingPlayer.hidden = true;
   pendingPlayer.removeAttribute("src");
-  textInput.hidden = true;
   textInput.value = "";
   if (objectUrl) {
     URL.revokeObjectURL(objectUrl);
@@ -286,22 +273,6 @@ micBtn.addEventListener("click", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Language pills
-// ---------------------------------------------------------------------------
-
-document.querySelectorAll(".lang-pill").forEach((pill) => {
-  pill.addEventListener("click", () => {
-    document.querySelectorAll(".lang-pill").forEach((p) => {
-      p.classList.remove("is-active");
-      p.setAttribute("aria-checked", "false");
-    });
-    pill.classList.add("is-active");
-    pill.setAttribute("aria-checked", "true");
-    currentLang = pill.dataset.lang;
-  });
-});
-
-// ---------------------------------------------------------------------------
 // File upload
 // ---------------------------------------------------------------------------
 
@@ -312,8 +283,20 @@ fileInput.addEventListener("change", () => {
   fileInput.value = "";
 });
 
-textBtn.addEventListener("click", () => {
-  setPendingText();
+// ---------------------------------------------------------------------------
+// Text input - send on Enter (Shift+Enter for new line)
+// ---------------------------------------------------------------------------
+
+textInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendPending();
+  }
+});
+
+sendBtn.addEventListener("click", () => {
+  sendPending();
+});
 });
 
 // ---------------------------------------------------------------------------
@@ -321,13 +304,26 @@ textBtn.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 
 async function sendPending() {
-  if (!pendingBlob && !pendingText) return;
+  const text = textInput.value.trim();
+  const isText = text.length > 0;
+  const isAudio = pendingBlob !== null;
+  
+  if (!isText && !isAudio) return;
+  
+  // Capture values
   const blob = pendingBlob;
   const filename = pendingFilename;
-  const text = textInput.value.trim();
   const lang = currentLang;
-  const isText = pendingText;
-  clearPending();
+  
+  // Clear state
+  textInput.value = "";
+  pendingBlob = null;
+  pendingFilename = "";
+  pendingBar.hidden = true;
+  if (objectUrl) {
+    URL.revokeObjectURL(objectUrl);
+    objectUrl = null;
+  }
 
   addBubble("user", (b) => {
     if (isText) {
@@ -387,7 +383,6 @@ async function sendPending() {
   }
 }
 
-sendBtn.addEventListener("click", sendPending);
 discardBtn.addEventListener("click", clearPending);
 
 // ---------------------------------------------------------------------------

@@ -55,6 +55,16 @@ HAUSA_PACK: Dict[str, Any] = {
     "delete_last": [_fold(p) for p in [
         "cire na karshe", "goge na karshe", "soke na karshe",
     ]],
+    "request_history": [_fold(p) for p in [
+        "nuna littafin tarihi na", "aiko rahoto na", "nuna littafin na",
+        "ka aiko rahoto na", "ka nuna littafin na", "ka aiko tarihi na",
+        "in bu rahoto na", "in bu littafin na", "in bu tarihi na",
+        "ka aiko abin da na yi", "ka nuna abin da na yi",
+        "abin da na rubuta", "littafin na", "tarihi na", "rahoto na",
+        "ka aiko", "ka nuna", "in bu",
+        "me koya abin da na yi", "me ga abin da na yi",
+        "ka aiko abin da na rubuta", "ka nuna abin da na rubuta",
+    ]],
     "number_words": {
         "daya": 1, "biyu": 2, "uku": 3, "hudu": 4, "biyar": 5,
         "shida": 6, "bakwai": 7, "takwas": 8, "tara": 9, "goma": 10,

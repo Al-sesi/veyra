@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -19,7 +19,7 @@ os.environ["DATABASE_URL"] = ""
 os.environ["TEST_MODE"] = "1"
 
 from app.db import init_db, query_one, query_rows
-from app.ledger import list_open_debts
+from app.ledger import list_open_debts, add_debt, mark_debt_paid
 
 
 # ---------------------------------------------------------------------------
@@ -423,3 +423,258 @@ def test_known_intent_without_menu_still_produces_zero_summary_not_menu(say):
     # Menu lines must be absent from a successful entry reply.
     assert "Here is what I can help with" not in result["reply_text"]
     assert "who owes me" not in result["reply_text"]
+
+
+# ---------------------------------------------------------------------------
+# Debtor Identity and Accumulation Tests
+# ---------------------------------------------------------------------------
+
+def test_same_debtor_multiple_debts_accumulate(tmp_db: Path, _patch_db):
+    """Test that multiple debts for the same person accumulate correctly."""
+    from app.ledger import add_debt, get_summary
+    
+    # First debt
+    add_debt(50, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    summary = get_summary(50, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 5000
+    
+    # Second debt for same person
+    add_debt(50, "Musa", 3000, "owed_to_me", db_path=tmp_db)
+    summary = get_summary(50, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 8000  # 5000 + 3000
+    
+    # Third debt
+    add_debt(50, "Musa", 2000, "owed_to_me", db_path=tmp_db)
+    summary = get_summary(50, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 10000  # 5000 + 3000 + 2000
+    
+    # Verify only one debtor record exists
+    from app.db import query_rows
+    debtors = query_rows(
+        tmp_db, "SELECT * FROM debtors WHERE user_id = ?;", (50,)
+    )
+    assert len(debtors) == 1
+    assert debtors[0]["canonical_name"] == "Musa"
+    
+    # Verify three transactions exist for this debtor
+    transactions = query_rows(
+        tmp_db, "SELECT * FROM debt_transactions WHERE debtor_id = ?;", (debtors[0]["id"],)
+    )
+    assert len(transactions) == 3
+
+
+def test_different_debtors_create_separate_records(tmp_db: Path, _patch_db):
+    """Test that different names create separate debtor records."""
+    from app.ledger import add_debt
+    
+    add_debt(51, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(51, "Bisi", 3000, "owed_to_me", db_path=tmp_db)
+    add_debt(51, "Amina", 2000, "owed_to_me", db_path=tmp_db)
+    
+    from app.db import query_rows
+    debtors = query_rows(
+        tmp_db, "SELECT * FROM debtors WHERE user_id = ?;", (51,)
+    )
+    assert len(debtors) == 3
+    names = {d["canonical_name"] for d in debtors}
+    assert names == {"Musa", "Bisi", "Amina"}
+
+
+def test_payment_reduces_debt_balance(tmp_db: Path, _patch_db):
+    """Test that payments correctly reduce the debt balance."""
+    from app.ledger import add_debt, mark_debt_paid, get_summary
+    
+    # Add debt
+    add_debt(52, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(52, "Musa", 3000, "owed_to_me", db_path=tmp_db)
+    
+    summary = get_summary(52, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 8000
+    
+    # Record payment
+    mark_debt_paid(52, "Musa", db_path=tmp_db)
+    summary = get_summary(52, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 3000  # 8000 - 5000 (oldest debt)
+
+
+def test_case_insensitive_name_matching(tmp_db: Path, _patch_db):
+    """Test that name matching is case-insensitive."""
+    from app.ledger import add_debt, get_summary
+    
+    add_debt(53, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(53, "musa", 3000, "owed_to_me", db_path=tmp_db)  # lowercase
+    add_debt(53, "MUSA", 2000, "owed_to_me", db_path=tmp_db)  # uppercase
+    
+    from app.db import query_rows
+    debtors = query_rows(
+        tmp_db, "SELECT * FROM debtors WHERE user_id = ?;", (53,)
+    )
+    assert len(debtors) == 1
+    assert debtors[0]["canonical_name"] == "Musa"
+    
+    summary = get_summary(53, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 10000
+
+
+def test_whitespace_in_names_is_normalized(tmp_db: Path, _patch_db):
+    """Test that whitespace in names is normalized."""
+    from app.ledger import add_debt
+    
+    add_debt(54, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(54, "  Musa  ", 3000, "owed_to_me", db_path=tmp_db)  # extra spaces
+    
+    from app.db import query_rows
+    debtors = query_rows(
+        tmp_db, "SELECT * FROM debtors WHERE user_id = ?;", (54,)
+    )
+    assert len(debtors) == 1
+
+
+def test_i_owe_debts_accumulate(tmp_db: Path, _patch_db):
+    """Test that "I owe" debts accumulate correctly."""
+    from app.ledger import add_debt, get_summary
+    
+    add_debt(55, "Musa", 5000, "i_owe", db_path=tmp_db)
+    summary = get_summary(55, db_path=tmp_db)
+    assert summary["total_i_owe"] == 5000
+    
+    add_debt(55, "Musa", 3000, "i_owe", db_path=tmp_db)
+    summary = get_summary(55, db_path=tmp_db)
+    assert summary["total_i_owe"] == 8000
+
+
+def test_mixed_debt_directions_for_same_person(tmp_db: Path, _patch_db):
+    """Test that a person can both owe and be owed (though unusual)."""
+    from app.ledger import add_debt, get_summary
+    
+    add_debt(56, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(56, "Musa", 2000, "i_owe", db_path=tmp_db)
+    
+    summary = get_summary(56, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 5000
+    assert summary["total_i_owe"] == 2000
+
+
+def test_payment_on_fully_paid_debt(tmp_db: Path, _patch_db):
+    """Test that payment on a fully paid debt is handled gracefully."""
+    from app.ledger import add_debt, mark_debt_paid, get_summary
+    
+    add_debt(57, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    mark_debt_paid(57, "Musa", db_path=tmp_db)
+    
+    # Should now be zero
+    summary = get_summary(57, db_path=tmp_db)
+    assert summary["total_owed_to_me"] == 0
+
+
+def test_debt_transaction_history_preserved(tmp_db: Path, _patch_db):
+    """Test that all debt transactions are preserved in history."""
+    from app.ledger import add_debt, mark_debt_paid
+    
+    add_debt(58, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(58, "Musa", 3000, "owed_to_me", db_path=tmp_db)
+    mark_debt_paid(58, "Musa", db_path=tmp_db)
+    
+    from app.db import query_rows
+    transactions = query_rows(
+        tmp_db, """
+        SELECT * FROM debt_transactions 
+        WHERE debtor_id IN (SELECT id FROM debtors WHERE user_id = ?)
+        ORDER BY created_at ASC;
+        """, (58,)
+    )
+    assert len(transactions) == 3
+    
+    # Verify transaction types
+    transaction_types = [t["transaction_type"] for t in transactions]
+    assert transaction_types == ["debt", "debt", "payment"]
+
+
+def test_fuzzy_name_matching_function(tmp_db: Path, _patch_db):
+    """Test the fuzzy name matching function directly."""
+    import app.ledger as ledger_mod
+    
+    # Create some debtors
+    add_debt(59, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(59, "Bisi", 3000, "owed_to_me", db_path=tmp_db)
+    
+    # Find similar names
+    similar = ledger_mod._find_similar_debtors(59, "Musaah", db_path=tmp_db)
+    assert len(similar) == 1
+    assert similar[0]["canonical_name"] == "Musa"
+    
+    # Exact match should not appear in similar results
+    similar_exact = ledger_mod._find_similar_debtors(59, "Musa", db_path=tmp_db)
+    assert len(similar_exact) == 0  # Exact match excluded by threshold > 0
+
+
+def test_levenshtein_distance_calculation():
+    """Test the Levenshtein distance calculation."""
+    import app.ledger as ledger_mod
+    
+    assert ledger_mod._levenshtein_distance("Musa", "Musa") == 0  # Same
+    assert ledger_mod._levenshtein_distance("Musa", "Musaah") == 2  # Two extra chars
+    assert ledger_mod._levenshtein_distance("Musa", "Bisi") == 3  # Different
+    assert ledger_mod._levenshtein_distance("Musa", "Misa") == 1  # One char difference
+
+
+def test_debtor_balance_calculation(tmp_db: Path, _patch_db):
+    """Test the debtor balance calculation function."""
+    import app.ledger as ledger_mod
+    
+    add_debt(60, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(60, "Musa", 3000, "owed_to_me", db_path=tmp_db)
+    mark_debt_paid(60, "Musa", db_path=tmp_db)
+    
+    from app.db import query_one
+    debtor = query_one(
+        tmp_db, "SELECT * FROM debtors WHERE user_id = ? AND canonical_name = ?;", (60, "Musa")
+    )
+    
+    balance = ledger_mod.get_debtor_balance(debtor["id"], db_path=tmp_db)
+    assert balance["total_owed_to_me"] == 3000  # 5000 + 3000 - 5000 (oldest paid)
+    assert balance["total_i_owe"] == 0
+
+
+def test_get_or_create_debtor_exact_match(tmp_db: Path, _patch_db):
+    """Test that get_or_create_debtor finds exact matches."""
+    import app.ledger as ledger_mod
+    
+    add_debt(61, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    
+    # Should find existing debtor
+    debtor1 = ledger_mod._get_or_create_debtor(61, "Musa", db_path=tmp_db)
+    debtor2 = ledger_mod._get_or_create_debtor(61, "Musa", db_path=tmp_db)
+    
+    assert debtor1["id"] == debtor2["id"]
+    assert debtor1["canonical_name"] == "Musa"
+    
+    # Should create new debtor for different name
+    debtor3 = ledger_mod._get_or_create_debtor(61, "Bisi", db_path=tmp_db)
+    assert debtor3["id"] != debtor1["id"]
+    assert debtor3["canonical_name"] == "Bisi"
+
+
+def test_list_open_debts_with_new_system(tmp_db: Path, _patch_db):
+    """Test that list_open_debts works with the new debtor system."""
+    from app.ledger import add_debt, mark_debt_paid, list_open_debts
+    
+    add_debt(62, "Musa", 5000, "owed_to_me", db_path=tmp_db)
+    add_debt(62, "Bisi", 3000, "owed_to_me", db_path=tmp_db)
+    
+    open_debts = list_open_debts(62, db_path=tmp_db)
+    assert len(open_debts) == 2
+    
+    # Musa should have 5000
+    musa_debt = next(d for d in open_debts if d["person"] == "Musa")
+    assert musa_debt["amount"] == 5000
+    
+    # Bisi should have 3000
+    bisi_debt = next(d for d in open_debts if d["person"] == "Bisi")
+    assert bisi_debt["amount"] == 3000
+    
+    # After payment, Musa should no longer appear (fully paid)
+    mark_debt_paid(62, "Musa", db_path=tmp_db)
+    open_debts = list_open_debts(62, db_path=tmp_db)
+    assert len(open_debts) == 1
+    assert open_debts[0]["person"] == "Bisi"

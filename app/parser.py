@@ -442,6 +442,8 @@ SALE_WORDS = [
     "sell", "sold", "sells", "selling",
     "don sell", "i don sell", "i sell", "me sell", "sold am",
     "sale", "sales",
+    # Additional sale indicators
+    "gave", "gave away", "transferred",
 ]
 
 EXPENSE_WORDS = [
@@ -453,9 +455,35 @@ EXPENSE_WORDS = [
     "spend", "spent", "spending",
     "rent", "transport", "fare", "fuel", "petrol", "diesel",
     "stock", "restock",
+    # Additional expense indicators for natural language variations
+    "got", "got it", "acquired", "sent for", "ordered",
+    "cost", "cost me", "price", "price of", "worth",
+    "charged", "charged me", "billed", "billed me",
+    "use", "used", "consumed", "ate", "drank",
+    # Semantic expense patterns - focus on the outcome/action
+    "paid for", "spent on", "gave money", "handed over money",
+    "money went", "money gone", "my money", "it cost",
+    "price was", "worth the", "value of",
+    # Additional variations
+    "handed over",  # Can be expense when handing over money
 ]
 
 EXPENSE_ITEMS = {"transport", "rent", "fare", "fuel", "petrol", "diesel", "light", "electricity"}
+
+# Contextual expense patterns - phrases that indicate expense even without explicit verbs
+# These patterns help understand the semantic meaning beyond exact verb matching
+EXPENSE_PATTERNS = [
+    "cost me", "price of", "worth", "sent for", "paid for",
+    "charged me", "billed me", "cost of",
+    # Semantic patterns that indicate spending/outflow
+    "i gave", "i paid", "it cost", "spent on", "money for",
+    "money on", "price was", "amount was", "value was",
+    # Conversational patterns
+    "ended up paying", "had to pay", "needed to pay",
+    "finally paid", "managed to pay", "was able to pay",
+    # Result-oriented patterns
+    "money went", "money gone", "my money",
+]
 
 # Yoruba transaction words, stored diacritic-folded ("ra" = buy, "tà" = sell,
 # "mọ́tò" = car). The verbs are only two letters, so they MUST be matched on
@@ -520,6 +548,9 @@ def detect_transaction_type(segment: str) -> Optional[str]:
     Handles English, common Nigerian Pidgin phrasing, Yoruba verbs
     ("ra" = buy, "tà" = sell), and the Hausa/Igbo/Yoruba phrase packs in
     app.languages — all matched diacritic-insensitively.
+    
+    Now includes contextual pattern matching for natural language variations.
+    Focuses on semantic understanding rather than exact keyword matching.
     """
     lowered = segment.lower()
     folded = strip_diacritics(lowered)
@@ -528,6 +559,18 @@ def detect_transaction_type(segment: str) -> Optional[str]:
     for item in EXPENSE_ITEMS:
         if item in lowered:
             return "expense"
+
+    # Check contextual expense patterns (e.g., "cost me", "sent for")
+    # These patterns indicate expense even without explicit transaction verbs
+    for pattern in EXPENSE_PATTERNS:
+        if pattern in lowered:
+            return "expense"
+
+    # Semantic analysis: look for result-oriented phrases
+    # "I got X and paid Y" -> the "paid" indicates expense regardless of "got"
+    # "sent for chin chin, spent 2k" -> "sent for" + "spent" = expense
+    if any(phrase in lowered for phrase in ["and paid", "and spent", "then paid", "then spent"]):
+        return "expense"
 
     expense_hits = sum(1 for w in EXPENSE_WORDS if w in lowered)
     sale_hits = sum(1 for w in SALE_WORDS if w in lowered)
@@ -539,6 +582,26 @@ def detect_transaction_type(segment: str) -> Optional[str]:
     expense_hits += sum(1 for p in PACK_BUY_VERBS if _contains_phrase(folded, p))
     expense_hits += sum(1 for p in PACK_PAY_VERBS if _contains_phrase(folded, p))
     sale_hits += sum(1 for p in PACK_SALE_VERBS if _contains_phrase(folded, p))
+
+    # Contextual boost: if there's an amount with expense-related context,
+    # bias toward expense
+    if expense_hits > 0 and any(word in lowered for word in ["2k", "5k", "10k", "1k", "3k", "naira", "n"]):
+        # If we have expense indicators AND an amount, it's likely an expense
+        # This handles phrases like "got chin chin 2k" where "got" is ambiguous
+        # but the presence of amount + contextual expense patterns leans toward expense
+        expense_hits += 1
+
+    # If segment has an amount but no clear transaction verb, infer from context
+    # e.g., "transport 2,000" -> expense (transport is an expense item)
+    if expense_hits == 0 and sale_hits == 0:
+        # Check if segment contains expense items
+        for item in EXPENSE_ITEMS:
+            if item in lowered:
+                return "expense"
+        # Only default to expense if there's an expense item or stronger context
+        # Don't default to expense for arbitrary words with amounts
+        # This prevents false positives like "extra 5k" being classified as expense
+        return None
 
     if expense_hits > sale_hits:
         return "expense"
@@ -645,6 +708,9 @@ def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], t
         "mo", "lo", "si", "ni", "ra", "ta", "tun", "ba", "wa", "wo", "mi",
         "dewo", "dera", "dara", "pelu", "ati", "lowo", "owo", "loja",
         "soja", "lonii",
+        # Natural language stopwords
+        "got", "it", "sent", "acquired", "ordered", "charged", "billed",
+        "handed", "over", "money", "went", "gone", "value",
     }
 
     words = text.split()
@@ -689,56 +755,135 @@ def find_quantity_text(segment: str, amount: Dict[str, Any], numerics: List[Dict
 def split_transactions(text: str) -> List[str]:
     """
     Split a transcript into individual transaction segments by:
+      - periods that are NOT part of decimal numbers (e.g. 2.5k)
       - commas that are NOT between digits (i.e. NOT thousand separators like 45,000)
       - semicolons
-      - periods that are NOT part of decimal numbers (e.g. 2.5k) and NOT part of
-        thousand separators (although thousand separators use commas, not periods)
       - connector words: " and ", " then "
 
     Examples:
       "45,000 naira, transport 2,000"  -> ["45,000 naira", "transport 2,000"]
       "Sold rice 2.5k. Bought beans 15k." -> ["Sold rice 2.5k", "Bought beans 15k"]
+      "I bought chin chin, 2k" -> ["I bought chin chin, 2k"] (kept together - natural language)
+      "I went to the market. I bought rice for 20,000 and later bought chin chin for 2,000."
+        -> ["I bought rice for 20,000", "later bought chin chin for 2,000"]
     """
-    normalized = re.sub(r"\s+(and|then)\s+", " , ", text, flags=re.IGNORECASE)
-    
-    # First, handle Hausa "kuma" (and) as a transaction separator
-    # "kuma na saya" starts a new transaction
-    parts = re.split(r"\s+kuma\s+", normalized)
-    
-    # Now split each part on commas/periods/semicolons
-    final_parts = []
-    for part in parts:
-        # Check if this part contains a Hausa pattern like "na saya [item], [amount]"
-        # If so, keep it together
-        has_hausa_pattern = False
-        part_lower = part.lower()
-        
-        # Check for patterns like "na saya [item], [number words]"
-        if any(verb in part_lower for verb in PACK_BUY_VERBS):
-            # Check if there's a comma followed by number words
-            if "," in part:
-                # Split by commas and check if any segment after a comma starts with number words
-                segments = part.split(",")
-                for i, seg in enumerate(segments[1:], 1):  # Skip first segment
-                    seg_lower = seg.strip().lower()
-                    first_words = seg_lower.split()[:2]  # Check first 2 words
-                    if any(word in ALL_NUMBER_WORDS for word in first_words):
-                        # This is likely "na saya [item], [amount]" pattern
-                        has_hausa_pattern = True
-                        break
-        
-        if has_hausa_pattern:
-            # Keep this part together
-            final_parts.append(part.strip())
+    # First, split on periods to separate sentences
+    # This handles conversational narratives where periods separate distinct transactions
+    # Use a regex that splits on periods not followed by digits (to avoid splitting "2.5k")
+    # We need to handle "2,000." as a sentence end (period after number with comma separator)
+    # Strategy: split on period, then check if the period was part of a decimal
+    sentence_parts = []
+    current = ""
+    for i, char in enumerate(text):
+        if char == '.':
+            # Check if this is a decimal (e.g., "2.5" or "2.5k")
+            # Look at the character before the period
+            if i > 0 and text[i-1].isdigit():
+                # Check if the character after is a digit (decimal like 2.5)
+                if i + 1 < len(text) and text[i+1].isdigit():
+                    current += char
+                else:
+                    # Period after digit but not followed by digit - likely sentence end
+                    # Split here
+                    sentence_parts.append(current.strip())
+                    current = ""
+            else:
+                # Period not after digit - definitely sentence end
+                sentence_parts.append(current.strip())
+                current = ""
         else:
-            # Use original splitting logic
-            subparts = re.split(
-                r";|,(?!(?<=\d,)\d)|(?<!\d)\.(?!\d)",
-                part
-            )
-            final_parts.extend([p.strip() for p in subparts if p.strip()])
+            current += char
+    if current.strip():
+        sentence_parts.append(current.strip())
     
-    return [p.strip() for p in final_parts if p.strip()]
+    final_parts = []
+    for part in sentence_parts:
+        part = part.strip()
+        if not part:
+            continue
+        
+        # Normalize connector words within this sentence
+        normalized = re.sub(r"\s+(and|then)\s+", " , ", part, flags=re.IGNORECASE)
+        
+        # Handle Hausa "kuma" (and) as a transaction separator
+        kuma_parts = re.split(r"\s+kuma\s+", normalized)
+        
+        for kuma_part in kuma_parts:
+            # Check if this part contains a Hausa pattern like "na saya [item], [amount]"
+            # If so, keep it together
+            has_hausa_pattern = False
+            part_lower = kuma_part.lower()
+            
+            # Check for patterns like "na saya [item], [number words]"
+            if any(verb in part_lower for verb in PACK_BUY_VERBS):
+                # Check if there's a comma followed by number words
+                if "," in kuma_part:
+                    # Split by commas and check if any segment after a comma starts with number words
+                    segments = kuma_part.split(",")
+                    for i, seg in enumerate(segments[1:], 1):  # Skip first segment
+                        seg_lower = seg.strip().lower()
+                        first_words = seg_lower.split()[:2]  # Check first 2 words
+                        if any(word in ALL_NUMBER_WORDS for word in first_words):
+                            # This is likely "na saya [item], [amount]" pattern
+                            has_hausa_pattern = True
+                            break
+            
+            # Also check for natural language patterns where comma separates item from amount
+            # e.g., "I bought chin chin, 2k" - keep together
+            has_natural_pattern = False
+            if "," in kuma_part:
+                # Check if pattern is like "[verb] [item], [amount]"
+                segments = kuma_part.split(",")
+                if len(segments) == 2:
+                    first_seg = segments[0].strip().lower()
+                    second_seg = segments[1].strip().lower()
+                    # Check if first part has a transaction verb
+                    has_verb = any(v in first_seg for v in ["buy", "bought", "purchase", "purchased", "got", "sent", "acquired", "ordered"])
+                    # Check if second part has an amount
+                    has_amount = any(c in second_seg for c in ["k", "naira", "n", "#", "₦"]) or re.search(r"\d", second_seg)
+                    if has_verb and has_amount:
+                        has_natural_pattern = True
+            
+            if has_hausa_pattern or has_natural_pattern:
+                # Keep this part together
+                final_parts.append(kuma_part.strip())
+            else:
+                # Use original splitting logic
+                subparts = re.split(
+                    r";|,(?!(?<=\d,)\d)",
+                    kuma_part
+                )
+                final_parts.extend([p.strip() for p in subparts if p.strip()])
+    
+    # Filter out segments that don't contain transaction indicators
+    # This removes filler text like "I went to the market this morning"
+    transaction_segments = []
+    all_tx_words = set(EXPENSE_WORDS + SALE_WORDS + 
+                      ["na saya", "na sayi", "mo ra", "mo ta", "azuru m", "e rere m"] +
+                      list(PACK_BUY_VERBS) + list(PACK_SALE_VERBS) + list(PACK_PAY_VERBS))
+    
+    for segment in final_parts:
+        seg_lower = segment.lower()
+        folded = strip_diacritics(seg_lower)
+        
+        # Check if segment contains any transaction indicator
+        has_tx_indicator = False
+        for tx_word in all_tx_words:
+            if tx_word in seg_lower or tx_word in folded:
+                has_tx_indicator = True
+                break
+        
+        # Also check if segment has an amount (k-shorthand, number, currency)
+        has_amount = bool(re.search(r"\d+k", seg_lower) or 
+                        re.search(r"\d+[,\.]?\d*", seg_lower) or
+                        any(c in seg_lower for c in ["k", "naira", "n", "#", "₦"]))
+        
+        # Keep segment if it has transaction indicator OR amount
+        # This handles cases like "transport 2,000" where "transport" is an expense item
+        if has_tx_indicator or has_amount:
+            transaction_segments.append(segment)
+    
+    return transaction_segments
 
 
 # ---------------------------------------------------------------------------

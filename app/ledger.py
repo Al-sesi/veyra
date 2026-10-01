@@ -91,6 +91,7 @@ def add_entries(
     audio_file: str = "",
     *,
     db_path=None,
+    detected_language: str = "en",
 ) -> list[dict[str, Any]]:
     """Insert a batch of parsed entries for a user, attach transcript+audio_file metadata
     on each row. Returns the freshly inserted rows (with generated ids)."""
@@ -106,8 +107,8 @@ def add_entries(
             with conn.cursor() as cur:
                 insert_sql = """
                     INSERT INTO entries (user_id, item, quantity, amount, type,
-                                     transcript, audio_file, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                                     transcript, audio_file, status, detected_language)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id;
                 """
                 inserted_ids = []
@@ -124,6 +125,7 @@ def add_entries(
                             transcript or "",
                             audio_file or "",
                             "active",
+                            detected_language,
                         )
                     )
                     inserted_ids.append(cur.fetchone()["id"])
@@ -144,8 +146,8 @@ def add_entries(
         else:
             insert_sql = """
                 INSERT INTO entries (user_id, item, quantity, amount, type,
-                                 transcript, audio_file, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                                 transcript, audio_file, status, detected_language)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
             rows: list[tuple] = []
             for e in entries:
@@ -160,6 +162,7 @@ def add_entries(
                         transcript or "",
                         audio_file or "",
                         "active",
+                        detected_language,
                     )
                 )
             conn.executemany(insert_sql, rows)
@@ -342,8 +345,18 @@ def add_debt(
     *,
     db_path=None,
 ) -> dict[str, Any]:
-    """Record a debt. `direction` is "owed_to_me" (they owe the trader) or
-    "i_owe" (the trader owes them). Returns the inserted row."""
+    """Record a debt using the new debtor identity system.
+    
+    `direction` is "owed_to_me" (they owe the trader) or
+    "i_owe" (the trader owes them). 
+    
+    This function:
+    1. Finds or creates a debtor record by exact name match
+    2. Adds a debt transaction to that debtor
+    3. Also records in the legacy debts table for backward compatibility
+    
+    Returns a dict with person, amount, direction, and other fields for backward compatibility.
+    """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
     if direction not in DEBT_DIRECTIONS:
@@ -352,6 +365,16 @@ def add_debt(
         )
     uid = _require_user(db_path, user_id)
     name = (person or "").strip() or "Unknown"
+    
+    # Get or create debtor using exact name match
+    debtor = _get_or_create_debtor(uid, name, db_path=db_path)
+    
+    # Add debt transaction
+    transaction = add_debt_transaction(
+        uid, debtor["id"], amount, direction, transaction_type="debt", db_path=db_path
+    )
+    
+    # Also record in legacy debts table for backward compatibility
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             with conn.cursor() as cur:
@@ -363,11 +386,7 @@ def add_debt(
                     """,
                     (uid, name, int(amount), direction),
                 )
-                new_id = cur.fetchone()["id"]
-                cur.execute(
-                    "SELECT * FROM debts WHERE id = %s;", (new_id,)
-                )
-                return row_to_dict(cur.fetchone())
+                legacy_id = cur.fetchone()["id"]
         else:
             cur = conn.execute(
                 """
@@ -376,10 +395,19 @@ def add_debt(
                 """,
                 (uid, name, int(amount), direction),
             )
-            row = conn.execute(
-                "SELECT * FROM debts WHERE id = ?;", (cur.lastrowid,)
-            ).fetchone()
-            return row_to_dict(row)
+            legacy_id = cur.lastrowid
+    
+    # Return a dict compatible with the old API (includes person field)
+    return {
+        "id": transaction["id"],
+        "person": name,
+        "amount": amount,
+        "direction": direction,
+        "status": "open",
+        "user_id": uid,
+        "debtor_id": debtor["id"],
+        "transaction_type": "debt",
+    }
 
 
 def mark_debt_paid(
@@ -388,14 +416,38 @@ def mark_debt_paid(
     *,
     db_path=None,
 ) -> Optional[dict[str, Any]]:
-    """Settle the OLDEST open debt for `person` (case-insensitive exact name).
-
-    Returns the updated row, or None when no open debt matches.
+    """Record a payment for a debtor using the new system.
+    
+    This function:
+    1. Finds the debtor by exact name match
+    2. Adds a payment transaction to reduce their balance
+    3. Also marks the oldest open debt in the legacy table as paid for backward compatibility
+    
+    Returns a dict with person, amount, direction, and other fields for backward compatibility.
     """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
     uid = _require_user(db_path, user_id)
     name = (person or "").strip()
+    
+    # Find debtor by exact name match
+    debtor = _get_or_create_debtor(uid, name, db_path=db_path)
+    
+    # Get current balance to determine direction
+    balance = get_debtor_balance(debtor["id"], db_path=db_path)
+    
+    # Determine which direction to record payment for
+    # If they owe us (total_owed_to_me > 0), payment reduces that
+    # If we owe them (total_i_owe > 0), payment reduces that
+    if balance["total_owed_to_me"] > 0:
+        direction = "owed_to_me"
+    elif balance["total_i_owe"] > 0:
+        direction = "i_owe"
+    else:
+        # No existing debt - can't record payment
+        return None
+    
+    # Get the amount of the oldest open debt to know how much to record
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             with conn.cursor() as cur:
@@ -411,6 +463,9 @@ def mark_debt_paid(
                 row = cur.fetchone()
                 if row is None:
                     return None
+                amount = row["amount"]
+                
+                # Mark legacy debt as paid
                 cur.execute(
                     """
                     UPDATE debts
@@ -419,10 +474,6 @@ def mark_debt_paid(
                     """,
                     (row["id"],),
                 )
-                cur.execute(
-                    "SELECT * FROM debts WHERE id = %s;", (row["id"],)
-                )
-                return row_to_dict(cur.fetchone())
         else:
             row = conn.execute(
                 """
@@ -435,6 +486,9 @@ def mark_debt_paid(
             ).fetchone()
             if row is None:
                 return None
+            amount = row["amount"]
+            
+            # Mark legacy debt as paid
             conn.execute(
                 """
                 UPDATE debts
@@ -443,10 +497,23 @@ def mark_debt_paid(
                 """,
                 (row["id"],),
             )
-            updated = conn.execute(
-                "SELECT * FROM debts WHERE id = ?;", (row["id"],)
-            ).fetchone()
-            return row_to_dict(updated)
+    
+    # Add payment transaction to new system
+    transaction = add_debt_transaction(
+        uid, debtor["id"], amount, direction, transaction_type="payment", db_path=db_path
+    )
+    
+    # Return a dict compatible with the old API
+    return {
+        "id": transaction["id"],
+        "person": name,
+        "amount": amount,
+        "direction": direction,
+        "status": "paid",
+        "user_id": uid,
+        "debtor_id": debtor["id"],
+        "transaction_type": "payment",
+    }
 
 
 def list_open_debts(
@@ -454,32 +521,90 @@ def list_open_debts(
     *,
     db_path=None,
 ) -> list[dict[str, Any]]:
-    """All open ("unpaid") debts for a user, newest first."""
+    """All open ("unpaid") debts for a user, using the new debtor system.
+    
+    Returns a list of debt dicts with debtor info and current balance.
+    """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
     uid = _require_user(db_path, user_id)
+    
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT * FROM debts
-                    WHERE user_id = %s AND status = 'open'
-                    ORDER BY created_at DESC, id DESC;
+                    SELECT d.id as debtor_id, d.canonical_name, d.original_name, d.created_at,
+                           dt.id as transaction_id, dt.amount, dt.direction, dt.transaction_type, dt.notes, dt.created_at as trans_created_at
+                    FROM debtors d
+                    LEFT JOIN debt_transactions dt ON d.id = dt.debtor_id
+                    WHERE d.user_id = %s
+                    ORDER BY d.created_at DESC, dt.created_at DESC;
                     """,
                     (uid,),
                 )
-                return [row_to_dict(row) for row in cur.fetchall()]
+                rows = [row_to_dict(row) for row in cur.fetchall()]
         else:
             rows = conn.execute(
                 """
-                SELECT * FROM debts
-                WHERE user_id = ? AND status = 'open'
-                ORDER BY created_at DESC, id DESC;
+                SELECT d.id as debtor_id, d.canonical_name, d.original_name, d.created_at,
+                       dt.id as transaction_id, dt.amount, dt.direction, dt.transaction_type, dt.notes, dt.created_at as trans_created_at
+                FROM debtors d
+                LEFT JOIN debt_transactions dt ON d.id = dt.debtor_id
+                WHERE d.user_id = ?
+                ORDER BY d.created_at DESC, dt.created_at DESC;
                 """,
                 (uid,),
             ).fetchall()
-            return [row_to_dict(r) for r in rows]
+            rows = [row_to_dict(r) for r in rows]
+    
+    # Group by debtor and calculate balances
+    debtor_balances = {}
+    for row in rows:
+        debtor_id = row["debtor_id"]
+        if debtor_id not in debtor_balances:
+            debtor_balances[debtor_id] = {
+                "person": row["canonical_name"],
+                "total_owed_to_me": 0,
+                "total_i_owe": 0,
+                "transactions": [],
+            }
+        
+        if row["transaction_id"]:  # Has transactions
+            debtor_balances[debtor_id]["transactions"].append(row)
+            if row["transaction_type"] == "debt":
+                if row["direction"] == "owed_to_me":
+                    debtor_balances[debtor_id]["total_owed_to_me"] += int(row["amount"])
+                else:
+                    debtor_balances[debtor_id]["total_i_owe"] += int(row["amount"])
+            elif row["transaction_type"] == "payment":
+                if row["direction"] == "owed_to_me":
+                    debtor_balances[debtor_id]["total_owed_to_me"] -= int(row["amount"])
+                else:
+                    debtor_balances[debtor_id]["total_i_owe"] -= int(row["amount"])
+    
+    # Filter to only debtors with outstanding balances
+    open_debts = []
+    for debtor_id, info in debtor_balances.items():
+        net_owed_to_me = info["total_owed_to_me"]
+        net_i_owe = info["total_i_owe"]
+        
+        if net_owed_to_me > 0:
+            open_debts.append({
+                "person": info["person"],
+                "amount": net_owed_to_me,
+                "direction": "owed_to_me",
+                "status": "open",
+            })
+        elif net_i_owe > 0:
+            open_debts.append({
+                "person": info["person"],
+                "amount": net_i_owe,
+                "direction": "i_owe",
+                "status": "open",
+            })
+    
+    return open_debts
 
 
 def get_summary(
@@ -530,15 +655,32 @@ def get_summary(
                 cur.execute(
                     """
                     SELECT
-                        COALESCE(SUM(CASE WHEN direction = 'owed_to_me' THEN amount ELSE 0 END), 0) AS total_owed_to_me,
-                        COALESCE(SUM(CASE WHEN direction = 'i_owe'       THEN amount ELSE 0 END), 0) AS total_i_owe
-                    FROM debts
-                    WHERE user_id = %s
-                      AND status = 'open';
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'owed_to_me' AND transaction_type = 'debt' THEN amount 
+                            ELSE 0 
+                        END), 0) AS debt_owed_to_me,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'owed_to_me' AND transaction_type = 'payment' THEN amount 
+                            ELSE 0 
+                        END), 0) AS payment_owed_to_me,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'i_owe' AND transaction_type = 'debt' THEN amount 
+                            ELSE 0 
+                        END), 0) AS debt_i_owe,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'i_owe' AND transaction_type = 'payment' THEN amount 
+                            ELSE 0 
+                        END), 0) AS payment_i_owe
+                    FROM debt_transactions
+                    WHERE debtor_id IN (
+                        SELECT id FROM debtors WHERE user_id = %s
+                    );
                     """,
                     (uid,),
                 )
                 debt_totals = cur.fetchone()
+                total_owed_to_me = int(debt_totals["debt_owed_to_me"]) - int(debt_totals["payment_owed_to_me"])
+                total_i_owe = int(debt_totals["debt_i_owe"]) - int(debt_totals["payment_i_owe"])
 
                 def _top_item(row_type: str) -> Optional[dict[str, Any]]:
                     days_interval = f"{days} days"
@@ -573,8 +715,8 @@ def get_summary(
                     "profit": total_sales - total_expenses,
                     "top_sale_item": _top_item("sale"),
                     "top_expense_item": _top_item("expense"),
-                    "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
-                    "total_i_owe": int(debt_totals["total_i_owe"]),
+                    "total_owed_to_me": total_owed_to_me,
+                    "total_i_owe": total_i_owe,
                 }
         else:
             totals = conn.execute(
@@ -595,14 +737,32 @@ def get_summary(
             debt_totals = conn.execute(
                 """
                 SELECT
-                    COALESCE(SUM(CASE WHEN direction = 'owed_to_me' THEN amount ELSE 0 END), 0) AS total_owed_to_me,
-                    COALESCE(SUM(CASE WHEN direction = 'i_owe'       THEN amount ELSE 0 END), 0) AS total_i_owe
-                FROM debts
-                WHERE user_id = ?
-                  AND status = 'open';
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'owed_to_me' AND transaction_type = 'debt' THEN amount 
+                        ELSE 0 
+                    END), 0) AS debt_owed_to_me,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'owed_to_me' AND transaction_type = 'payment' THEN amount 
+                        ELSE 0 
+                    END), 0) AS payment_owed_to_me,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'i_owe' AND transaction_type = 'debt' THEN amount 
+                        ELSE 0 
+                    END), 0) AS debt_i_owe,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'i_owe' AND transaction_type = 'payment' THEN amount 
+                        ELSE 0 
+                    END), 0) AS payment_i_owe
+                FROM debt_transactions
+                WHERE debtor_id IN (
+                    SELECT id FROM debtors WHERE user_id = ?
+                );
                 """,
                 (uid,),
             ).fetchone()
+            
+            total_owed_to_me = int(debt_totals["debt_owed_to_me"]) - int(debt_totals["payment_owed_to_me"])
+            total_i_owe = int(debt_totals["debt_i_owe"]) - int(debt_totals["payment_i_owe"])
 
             def _top_item(row_type: str) -> Optional[dict[str, Any]]:
                 row = conn.execute(
@@ -635,8 +795,8 @@ def get_summary(
                 "profit": total_sales - total_expenses,
                 "top_sale_item": _top_item("sale"),
                 "top_expense_item": _top_item("expense"),
-                "total_owed_to_me": int(debt_totals["total_owed_to_me"]),
-                "total_i_owe": int(debt_totals["total_i_owe"]),
+                "total_owed_to_me": total_owed_to_me,
+                "total_i_owe": total_i_owe,
             }
 
 
@@ -1057,4 +1217,293 @@ def check_low_stock(user_id: int, item: str, *, db_path=None) -> Optional[str]:
                 return f"You have only {stock['quantity_remaining']} {item} left."
             break
     return None
+
+
+# ---------------------------------------------------------------------------
+# Debtor Identity and Accumulation System
+# ---------------------------------------------------------------------------
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate Levenshtein distance between two strings for fuzzy name matching."""
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+def _find_similar_debtors(
+    user_id: int,
+    name: str,
+    *,
+    db_path=None,
+    threshold: int = 2
+) -> list[dict[str, Any]]:
+    """Find debtors with similar names (within Levenshtein distance threshold).
+    
+    Returns a list of debtor dicts with similar names, sorted by similarity.
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    name_normalized = name.strip().lower()
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, canonical_name, original_name, created_at
+                    FROM debtors
+                    WHERE user_id = %s;
+                    """,
+                    (uid,),
+                )
+                debtors = [row_to_dict(row) for row in cur.fetchall()]
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, canonical_name, original_name, created_at
+                FROM debtors
+                WHERE user_id = ?;
+                """,
+                (uid,),
+            ).fetchall()
+            debtors = [row_to_dict(r) for r in rows]
+    
+    # Filter by similarity threshold
+    similar = []
+    for debtor in debtors:
+        distance = _levenshtein_distance(name_normalized, debtor["canonical_name"].lower())
+        if distance <= threshold and distance > 0:  # >0 to exclude exact matches
+            similar.append((distance, debtor))
+    
+    # Sort by distance (closest match first)
+    similar.sort(key=lambda x: x[0])
+    return [debtor for _, debtor in similar]
+
+
+def _get_or_create_debtor(
+    user_id: int,
+    name: str,
+    *,
+    db_path=None,
+) -> dict[str, Any]:
+    """Get existing debtor by exact name match, or create a new one.
+    
+    Returns the debtor dict (with id, canonical_name, original_name, etc.).
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    uid = _require_user(db_path, user_id)
+    name_normalized = name.strip()
+    
+    with get_connection(db_path) as conn:
+        # Try to find exact match first (case-insensitive)
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT * FROM debtors
+                    WHERE user_id = %s AND LOWER(canonical_name) = LOWER(%s)
+                    LIMIT 1;
+                    """,
+                    (uid, name_normalized),
+                )
+                existing = cur.fetchone()
+                if existing:
+                    return row_to_dict(existing)
+                
+                # Create new debtor
+                cur.execute(
+                    """
+                    INSERT INTO debtors (user_id, canonical_name, original_name)
+                    VALUES (%s, %s, %s)
+                    RETURNING id;
+                    """,
+                    (uid, name_normalized, name_normalized),
+                )
+                new_id = cur.fetchone()["id"]
+                cur.execute(
+                    "SELECT * FROM debtors WHERE id = %s;", (new_id,)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            row = conn.execute(
+                """
+                SELECT * FROM debtors
+                WHERE user_id = ? AND LOWER(canonical_name) = LOWER(?)
+                LIMIT 1;
+                """,
+                (uid, name_normalized),
+            ).fetchone()
+            if row:
+                return row_to_dict(row)
+            
+            # Create new debtor
+            cur = conn.execute(
+                """
+                INSERT INTO debtors (user_id, canonical_name, original_name)
+                VALUES (?, ?, ?);
+                """,
+                (uid, name_normalized, name_normalized),
+            )
+            new_row = conn.execute(
+                "SELECT * FROM debtors WHERE id = ?;", (cur.lastrowid,)
+            ).fetchone()
+            return row_to_dict(new_row)
+
+
+def add_debt_transaction(
+    user_id: int,
+    debtor_id: int,
+    amount: int,
+    direction: str,
+    transaction_type: str = "debt",
+    notes: str = "",
+    *,
+    db_path=None,
+) -> dict[str, Any]:
+    """Add a debt transaction to an existing debtor.
+    
+    Args:
+        user_id: The user's ID
+        debtor_id: The debtor's ID from the debtors table
+        amount: The amount in naira
+        direction: "owed_to_me" or "i_owe"
+        transaction_type: "debt" (new debt) or "payment" (payment made/received)
+        notes: Optional notes about the transaction
+    
+    Returns the inserted transaction row.
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    if direction not in DEBT_DIRECTIONS:
+        raise ValueError(
+            f"direction must be one of {DEBT_DIRECTIONS}, got {direction!r}"
+        )
+    if transaction_type not in ("debt", "payment"):
+        raise ValueError(
+            f"transaction_type must be 'debt' or 'payment', got {transaction_type!r}"
+        )
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id;
+                    """,
+                    (debtor_id, int(amount), direction, transaction_type, notes),
+                )
+                new_id = cur.fetchone()["id"]
+                cur.execute(
+                    "SELECT * FROM debt_transactions WHERE id = %s;", (new_id,)
+                )
+                return row_to_dict(cur.fetchone())
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes)
+                VALUES (?, ?, ?, ?, ?);
+                """,
+                (debtor_id, int(amount), direction, transaction_type, notes),
+            )
+            row = conn.execute(
+                "SELECT * FROM debt_transactions WHERE id = ?;", (cur.lastrowid,)
+            ).fetchone()
+            return row_to_dict(row)
+
+
+def get_debtor_balance(
+    debtor_id: int,
+    *,
+    db_path=None,
+) -> dict[str, int]:
+    """Calculate the current balance for a debtor.
+    
+    Returns a dict with:
+        - total_owed_to_me: sum of "owed_to_me" debts minus payments
+        - total_i_owe: sum of "i_owe" debts minus payments
+    """
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'owed_to_me' AND transaction_type = 'debt' THEN amount 
+                            ELSE 0 
+                        END), 0) AS debt_owed_to_me,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'owed_to_me' AND transaction_type = 'payment' THEN amount 
+                            ELSE 0 
+                        END), 0) AS payment_owed_to_me,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'i_owe' AND transaction_type = 'debt' THEN amount 
+                            ELSE 0 
+                        END), 0) AS debt_i_owe,
+                        COALESCE(SUM(CASE 
+                            WHEN direction = 'i_owe' AND transaction_type = 'payment' THEN amount 
+                            ELSE 0 
+                        END), 0) AS payment_i_owe
+                    FROM debt_transactions
+                    WHERE debtor_id = %s;
+                    """,
+                    (debtor_id,),
+                )
+                row = cur.fetchone()
+        else:
+            row = conn.execute(
+                """
+                SELECT
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'owed_to_me' AND transaction_type = 'debt' THEN amount 
+                        ELSE 0 
+                    END), 0) AS debt_owed_to_me,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'owed_to_me' AND transaction_type = 'payment' THEN amount 
+                        ELSE 0 
+                    END), 0) AS payment_owed_to_me,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'i_owe' AND transaction_type = 'debt' THEN amount 
+                        ELSE 0 
+                    END), 0) AS debt_i_owe,
+                    COALESCE(SUM(CASE 
+                        WHEN direction = 'i_owe' AND transaction_type = 'payment' THEN amount 
+                        ELSE 0 
+                    END), 0) AS payment_i_owe
+                FROM debt_transactions
+                WHERE debtor_id = ?;
+                """,
+                (debtor_id,),
+            ).fetchone()
+        
+        debt_owed_to_me = int(row["debt_owed_to_me"]) if row["debt_owed_to_me"] else 0
+        payment_owed_to_me = int(row["payment_owed_to_me"]) if row["payment_owed_to_me"] else 0
+        debt_i_owe = int(row["debt_i_owe"]) if row["debt_i_owe"] else 0
+        payment_i_owe = int(row["payment_i_owe"]) if row["payment_i_owe"] else 0
+        
+        return {
+            "total_owed_to_me": debt_owed_to_me - payment_owed_to_me,
+            "total_i_owe": debt_i_owe - payment_i_owe,
+        }
 

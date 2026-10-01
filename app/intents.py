@@ -168,7 +168,7 @@ CORRECTION_TRIGGERS = [
 ]
 
 REQUEST_HISTORY_TRIGGERS = [
-    # English
+    # English - expanded with more natural phrases
     "show my history", "show me my history", "my history",
     "send my records", "send me my records", "my records", "my record",
     "my report", "send me my report", "show me my report", "my statement",
@@ -176,15 +176,33 @@ REQUEST_HISTORY_TRIGGERS = [
     "show me my ledger", "export my ledger", "download my ledger",
     "give me my report", "give me my records", "give me my history",
     "can i have my report", "can i see my records", "can i see my history",
-    # Nigerian Pidgin
+    "what have i recorded", "show me my transactions", "my transactions",
+    "show my transactions", "send my summary", "my summary", "show my summary",
+    "show me my summary", "what's my summary", "get my history",
+    "get my records", "get my report", "get my ledger", "get my transactions",
+    "view my history", "view my records", "view my report", "view my ledger",
+    "view my transactions", "check my history", "check my records",
+    "check my report", "check my ledger", "check my transactions",
+    "i want my history", "i want my records", "i want my report",
+    "i want my ledger", "i want my transactions", "i want my summary",
+    "how have i been doing", "what have i been doing", "my activity",
+    "show my activity", "view my activity", "check my activity",
+    # Nigerian Pidgin - expanded with more natural phrases
     "show my history", "send my report", "send my records",
     "give me my report", "give me my records", "my report",
     "my records", "show me my book", "my book", "give me my book",
     "abeg send my report", "abeg give me my records", "i need my report",
-    "i need my records",
-    # TODO: Yoruba triggers (e.g. "fihan iwe mi", "ranse iwe-akoso mi")
-    # TODO: Hausa triggers (e.g. "nuna littafin tarihi na", "aiko rahoto na")
-    # TODO: Igbo triggers (e.g. "gosi akwụkwọ m", "zipụta akwụkwọ ndebi m")
+    "i need my records", "wetin i don do", "show me wetin i don do",
+    "wetin i don record", "show me wetin i don record", "my summary",
+    "send my summary", "show my summary", "i want my summary",
+    "i need my summary", "check my book", "view my book",
+    "how i dey do", "wetin i dey do", "my activity", "show my activity",
+    # Yoruba - from language pack
+    *YORUBA_PACK["request_history"],
+    # Hausa - from language pack
+    *HAUSA_PACK["request_history"],
+    # Igbo - from language pack
+    *IGBO_PACK["request_history"],
 ]
 
 CHECK_STOCK_TRIGGERS = [

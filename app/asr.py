@@ -198,6 +198,84 @@ def language_notice(language: str) -> Optional[str]:
     )
 
 
+def detect_language_from_text(text: str) -> str:
+    """Detect the language of a text message/transcript using simple heuristics.
+
+    Returns a language code from LANGUAGE_MODEL_CONFIG keys (e.g., "en", "yo", "ha", "ig", "pcm").
+    Defaults to "en" (English) if no clear language is detected.
+
+    This is a lightweight detector that looks for language-specific words and patterns.
+    It's not perfect but works well for the supported Nigerian languages.
+    """
+    if not text:
+        return "en"
+    
+    text_lower = text.lower()
+    
+    # Language-specific word markers (common words unique to each language)
+    # Use longer, more distinctive words to reduce false positives
+    # Require at least 2 markers to be confident in detection
+    
+    # Hausa markers: common Hausa words (very specific, 3+ chars)
+    hausa_markers = [
+        "saya", "mai", "akwai", "shinkafa", "zuwa", "kina", "zai", "ne", "ya", "ta",
+        "su", "mu", "ku", "kin", "ke", "wannan", "fark", "mai", "duk", "amman"
+    ]
+    
+    # Igbo markers: common Igbo words (very specific, 3+ chars)
+    igbo_markers = [
+        "zụrọ", "gị", "n'ụzọ", "ụ", "ị", "ọ", "osikapa", "ego", "bịa", "zọ", "nri",
+        "bụ", "mere", "lee", "ụzọ", "nke", "ka", "n'aka", "jiri", "bido", "ga",
+        "mere", "jiri", "bido", "ka", "lee"
+    ]
+    
+    # Pidgin markers: common Nigerian Pidgin words (very specific, 3+ chars)
+    pidgin_markers = [
+        "naija", "wahala", "wetin", "sabi", "dey", "make", "wey", "dis", "dat", "dem",
+        "abi", "shebi", "kai", "chai", "biko", "jare", "body", "don", "come", "go",
+        "wetin", "sabi", "naija", "wahala"
+    ]
+    
+    # Yoruba markers: common Yoruba words (more specific, 3+ chars)
+    yoruba_markers = [
+        "mo", "ra", "fun", "won", "wa", "lo", "si", "ire", "esi", "owo",
+        "nitori", "jẹ", "yeruba", "yoruba", "ti", "k", "f", "d", "b", "n",
+        "nitori", "jẹ", "yeruba", "yoruba", "ire", "esi"
+    ]
+    
+    # Count matches for each language (only count markers that are at least 2 chars long)
+    hausa_count = sum(1 for marker in hausa_markers if len(marker) >= 2 and marker in text_lower)
+    igbo_count = sum(1 for marker in igbo_markers if len(marker) >= 2 and marker in text_lower)
+    pidgin_count = sum(1 for marker in pidgin_markers if len(marker) >= 2 and marker in text_lower)
+    yoruba_count = sum(1 for marker in yoruba_markers if len(marker) >= 2 and marker in text_lower)
+    
+    # Determine language based on highest match count
+    counts = {
+        "ha": hausa_count,
+        "ig": igbo_count,
+        "pcm": pidgin_count,
+        "yo": yoruba_count,
+    }
+    
+    # Find the language with the highest count
+    max_count = max(counts.values())
+    
+    # If no clear winner (all counts are 0 or tied), default to English
+    if max_count == 0:
+        return "en"
+    
+    # Get the language with the highest count
+    detected_lang = max(counts, key=counts.get)
+    
+    # Require at least 2 markers to be confident in detection (to avoid false positives)
+    # Otherwise default to English
+    if counts[detected_lang] >= 2:
+        return detected_lang
+    
+    # Otherwise default to English
+    return "en"
+
+
 def _get_ffmpeg_path() -> Optional[str]:
     """
     Find ffmpeg executable in order of preference:

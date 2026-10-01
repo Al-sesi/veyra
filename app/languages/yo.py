@@ -59,6 +59,16 @@ YORUBA_PACK: Dict[str, Any] = {
     "delete_last": [_fold(p) for p in [
         "yo eyi to kehin", "pa a re", "fagilee eyi",
     ]],
+    "request_history": [_fold(p) for p in [
+        "fihan iwe mi", "ranse iwe-akoso mi", "fihan awon iwe mi",
+        "ki o so mi awon iwe mi", "ki o fi iwe mi ranse mi",
+        "mo nife awon iwe mi", "mo nife iwe-akoso mi",
+        "ki o fihann iwe-akoso mi", "ki o so mi iwe mi",
+        "awon iwe akoso mi", "iwe mi", "iwe-akoso mi",
+        "ki o ranse mi", "ki o fihann mi", "ki o so mi",
+        "afi nko ti mo se", "kini mo ti se", "awon ohun mo ti se",
+        "ki o fi awon nkan ti mo se ranse mi",
+    ]],
     "number_words": {
         "okan": 1, "kan": 1,
         "meji": 2, "eji": 2,

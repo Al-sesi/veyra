@@ -1,9 +1,12 @@
 {
-  "installCommand": "pip install -r requirements-api.txt",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net/:1"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/api/handler"
+      "destination": "/site/$1"
     }
   ],
   "cleanUrls": true,

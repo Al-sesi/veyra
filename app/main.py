@@ -75,7 +75,7 @@ _production_origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_local_origins + _production_origins + _parse_extra_origins(),
-    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$|^https://.*\.vercel\.app$",
     allow_methods=["*"],
     allow_headers=["*"],
 )

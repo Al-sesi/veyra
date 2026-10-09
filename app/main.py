@@ -70,12 +70,11 @@ _local_origins = [
 _production_origins = [
     "https://veyra-1.vercel.app",
     "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net",
-    "https://*.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_local_origins + _production_origins + _parse_extra_origins(),
-    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$|^https://.*\.vercel\.app$",
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )

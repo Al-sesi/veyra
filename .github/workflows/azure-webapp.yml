@@ -36,10 +36,7 @@ jobs:
 
       - name: Zip artifact for deployment
         run: |
-          cd app
-          zip -r ../app.zip .
-          cd ..
-          zip -r deploy.zip app.zip requirements.txt runtime.txt
+          zip -r deploy.zip app requirements.txt runtime.txt
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4

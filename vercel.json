@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net/:1"
+      "destination": "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net/$1"
     },
     {
       "source": "/(.*)",

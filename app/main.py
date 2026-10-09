@@ -111,7 +111,8 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
     # Skip automatic model loading during startup to prevent 502 errors on free tier
     # Models will load on-demand when users make requests
     # Call /warmup endpoint manually if you want to preload models
-    logger.info("Skipping automatic model loading to prevent startup timeout")
+    # For Azure Web App with ML dependencies, model loading requires /warmup call
+    logger.info("Skipping automatic model loading to prevent startup timeout. Call /warmup to load N-ATLAS models.")
 
 
 @app.get("/")
@@ -164,8 +165,8 @@ def warmup():
     try:
         from app.asr import load_essential_models, get_model_status
 
-        # Load English model with more retries for first-time loading
-        load_status = load_essential_models(max_retries=3, retry_delay=2.0)
+        # Load English model with more retries for first-time loading (network issues)
+        load_status = load_essential_models(max_retries=5, retry_delay=5.0)
         model_status = get_model_status()
 
         return {

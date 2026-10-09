@@ -367,7 +367,7 @@ def _convert_to_wav_16k_mono(audio_path: str) -> str:
     return wav_path
 
 
-def _load_pipeline(lang_code: str, max_retries: int = 3, retry_delay: float = 2.0):
+def _load_pipeline(lang_code: str, max_retries: int = 5, retry_delay: float = 5.0):
     """
     Load the ASR pipeline for ``lang_code`` or return a cached copy.
 
@@ -390,6 +390,8 @@ def _load_pipeline(lang_code: str, max_retries: int = 3, retry_delay: float = 2.
     from transformers import pipeline  # noqa: PLC0415
 
     logger.info(f"Loading ASR model {model_name} for language {lang_code}...")
+    logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'not set')}")
+    logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'not set')}")
 
     # Exact usage pattern from all four NCAIR1 model cards ("Basic Usage"
     # section), e.g.:

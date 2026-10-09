@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: 'veyra'
+  AZURE_WEBAPP_NAME: 'veyra-plan'
   AZURE_WEBAPP_PACKAGE_PATH: '.'
   PYTHON_VERSION: '3.12'
 

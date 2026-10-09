@@ -8,7 +8,7 @@
  */
 
 const LOCAL_FALLBACK = "http://127.0.0.1:8000";
-const AZURE_BACKEND = "https://veyra-backend.westeurope.azurecontainerapps.io";
+const AZURE_BACKEND = "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net";
 const qs = new URLSearchParams(window.location.search);
 const API_BASE = (function () {
   if (qs.has("api")) return qs.get("api").replace(/\/+$/, "");

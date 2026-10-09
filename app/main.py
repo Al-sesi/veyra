@@ -67,9 +67,12 @@ _local_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:5173",
 ]
+_production_origins = [
+    "https://veyra-1.vercel.app",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_local_origins + _parse_extra_origins(),
+    allow_origins=_local_origins + _production_origins + _parse_extra_origins(),
     allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],

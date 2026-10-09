@@ -1,12 +1,23 @@
 """
-LLM-based fallback extraction layer for Veyra using Google Gemini 2.5 Flash-Lite.
+LLM-based fallback extraction layer for Veyra using Azure OpenAI / OpenAI.
 
 This module provides a fallback extraction mechanism when the rule-based parser
-fails or returns low-confidence results. It uses Google Gemini 2.5 Flash-Lite to
-extract structured bookkeeping entries from transcripts.
+fails or returns low-confidence results. It uses OpenAI (gpt-4o-mini by default,
+or any Azure OpenAI deployment via AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT)
+to extract structured bookkeeping entries from transcripts.
 
 The LLM is designed as a fallback only - it does not replace the existing
 rule-based parser and all entries must pass through the same validation pipeline.
+
+Environment variables:
+  - AZURE_OPENAI_API_KEY  : API key for Azure OpenAI Service (preferred)
+  - AZURE_OPENAI_ENDPOINT : https://<name>.openai.azure.com/ (required for Azure)
+  - AZURE_OPENAI_DEPLOYMENT : deployment name e.g. gpt-4o-mini (required for Azure)
+  - AZURE_OPENAI_API_VERSION : optional, defaults to 2024-08-01-preview
+
+  Fallback (direct OpenAI):
+  - OPENAI_API_KEY        : direct OpenAI key (used only if AZURE_OPENAI_API_KEY is unset)
+  - OPENAI_MODEL          : optional model name, defaults to gpt-4o-mini
 """
 
 import logging
@@ -19,13 +30,14 @@ logger = logging.getLogger("veyra.llm_parser")
 # Language names for the LLM instruction
 LANGUAGE_NAMES = {
     "en": "Nigerian English",
-    "ha": "Hausa", 
+    "ha": "Hausa",
     "ig": "Igbo",
     "yo": "Yoruba",
     "pcm": "Nigerian Pidgin"
 }
 
-# System instruction for Gemini
+# System instruction — identical structure to the previous prompt; only the
+# provider/client code below changes so behaviour stays equivalent.
 SYSTEM_INSTRUCTION = """
 You are a bookkeeping extraction assistant for Nigerian market traders. 
 Extract structured bookkeeping entries from the transcript and return ONLY valid JSON.
@@ -68,7 +80,7 @@ TRANSACTION TYPES:
 - "sale": Selling items
 - "expense": Buying items or paying for services (transport, rent, etc.)
 - "debt_owed_to_me": Someone owes the speaker money
-- "debt_i_owe": Speaker owes someone money  
+- "debt_i_owe": Speaker owes someone money
 - "debt_paid": A debt was paid
 - "correction": Correcting a previous entry
 - "delete_last": Removing the last entry
@@ -84,7 +96,7 @@ EXAMPLES:
 Input: "I sold rice for 5k"
 Output: [{"item": "rice", "quantity": null, "amount": 5000, "type": "sale", "confidence": "high"}]
 
-Input: "I bought chin chin, spent 2k"  
+Input: "I bought chin chin, spent 2k"
 Output: [{"item": "chin chin", "quantity": null, "amount": 2000, "type": "expense", "confidence": "high"}]
 
 Input: "I got chin chin and paid 2,000"
@@ -101,47 +113,82 @@ Output: [{"item": null, "quantity": null, "amount": null, "type": "unclear", "co
 """
 
 
-def _get_gemini_client():
+def _get_llm_client_and_model():
     """
-    Initialize and return the Gemini client.
-    Reads API key from GEMINI_API_KEY environment variable.
+    Initialize and return a tuple of (openai_client, model_or_deployment_name).
+
+    Priority:
+      1. Azure OpenAI Service  (AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_DEPLOYMENT)
+      2. Direct OpenAI API     (OPENAI_API_KEY, optional OPENAI_MODEL)
     """
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY environment variable is not set")
-    
+    azure_api_key = os.environ.get("AZURE_OPENAI_API_KEY")
+    azure_endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
+    azure_deployment = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+    azure_api_version = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
+
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        return genai.GenerativeModel(
-            model_name="gemini-1.5-flash",  # Using Flash model for speed and cost
-            generation_config={
-                "temperature": 0.1,  # Low temperature for consistent extraction
-                "max_output_tokens": 1024,
-                "response_mime_type": "application/json",
-            }
-        )
+        import openai
     except ImportError:
-        raise ImportError("google-generativeai package is not installed. Add it to requirements.")
-    except Exception as e:
-        raise RuntimeError(f"Failed to initialize Gemini client: {e}")
+        raise ImportError(
+            "openai package is not installed. Add 'openai>=1.0' to requirements."
+        )
+
+    # --- Azure OpenAI Service ---
+    if azure_api_key and azure_endpoint and azure_deployment:
+        try:
+            client = openai.AzureOpenAI(
+                api_key=azure_api_key,
+                api_version=azure_api_version,
+                azure_endpoint=azure_endpoint,
+            )
+            logger.info("Using Azure OpenAI Service endpoint: %s (deployment: %s)",
+                        azure_endpoint, azure_deployment)
+            return client, azure_deployment
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize Azure OpenAI client: {e}")
+
+    # --- Fallback: direct OpenAI ---
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
+    if openai_api_key:
+        try:
+            client = openai.OpenAI(api_key=openai_api_key)
+            model_name = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+            logger.info("Using direct OpenAI API model: %s", model_name)
+            return client, model_name
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize OpenAI client: {e}")
+
+    raise ValueError(
+        "No LLM credentials provided. Set either "
+        "(AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT) for Azure OpenAI, "
+        "or OPENAI_API_KEY for the direct OpenAI API."
+    )
+
+
+def _build_user_prompt(transcript: str, language_name: str) -> str:
+    return (
+        f'Transcript: "{transcript}"\n'
+        f"Language: {language_name}\n\n"
+        "Extract the bookkeeping entries according to the system instructions.\n"
+        "Return ONLY a JSON array of entries."
+    )
 
 
 def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, Any]], str]:
     """
-    Extract bookkeeping entries from a transcript using Gemini Flash.
-    
+    Extract bookkeeping entries from a transcript using Azure OpenAI / OpenAI.
+
     This is a fallback extraction mechanism that should only be called when:
     - The rule-based parser returns zero entries, OR
     - The rule-based parser returns entries but all are flagged as low-confidence
-    
+
     Parameters
     ----------
     transcript : str
         The text transcript from ASR (speech-to-text)
     language : str
         Language code: "en", "ha", "ig", "yo", or "pcm"
-    
+
     Returns
     -------
     tuple[list[dict], str]
@@ -152,70 +199,79 @@ def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, 
         - type (str): transaction type
         - confidence (str): "high" or "low"
         and raw_output is the raw JSON string from the LLM
-    
+
     Raises
     ------
     ValueError
-        If GEMINI_API_KEY is not set
+        If neither Azure OpenAI nor OpenAI credentials are set
     RuntimeError
-        If the Gemini API call fails for any reason
+        If the LLM API call fails for any reason
     """
     if not transcript or not transcript.strip():
         logger.warning("Empty transcript provided to LLM parser")
         return [{
             "item": None,
-            "quantity": None, 
+            "quantity": None,
             "amount": None,
             "type": "unclear",
             "confidence": "low"
         }], "Empty transcript"
-    
-    language_name = LANGUAGE_NAMES.get(language, language)
-    
-    try:
-        model = _get_gemini_client()
-        
-        prompt = f"""
-Transcript: "{transcript}"
-Language: {language_name}
 
-Extract the bookkeeping entries according to the system instructions.
-Return ONLY a JSON array of entries.
-"""
-        
-        logger.info(f"Calling Gemini API for transcript in {language_name}")
-        
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 1024,
-                "response_mime_type": "application/json",
-            }
+    language_name = LANGUAGE_NAMES.get(language, language)
+
+    try:
+        client, model = _get_llm_client_and_model()
+
+        user_prompt = _build_user_prompt(transcript, language_name)
+
+        logger.info(f"Calling LLM (Azure/OpenAI) for transcript in {language_name}")
+
+        response = client.chat.completions.create(
+            model=model,
+            temperature=0.1,
+            max_tokens=1024,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM_INSTRUCTION.strip()},
+                {"role": "user", "content": user_prompt},
+            ],
         )
-        
-        if not response or not response.text:
-            logger.error("Gemini API returned empty response")
-            raise RuntimeError("Gemini API returned empty response")
-        
-        raw_output = response.text.strip()
+
+        if (not response
+                or not response.choices
+                or not response.choices[0].message
+                or not response.choices[0].message.content):
+            logger.error("LLM API returned empty response")
+            raise RuntimeError("LLM API returned empty response")
+
+        raw_output = response.choices[0].message.content.strip()
         logger.debug(f"Raw LLM output: {raw_output}")
-        
+
         # Parse JSON response
         try:
-            entries = json.loads(raw_output)
-            if not isinstance(entries, list):
-                logger.error(f"LLM did not return a list: {type(entries)}")
+            parsed = json.loads(raw_output)
+            # The system prompt asks for a JSON *array*, but because we used
+            # `response_format: json_object` some providers/models may wrap
+            # it in an object like {"entries": [...]}.  Handle both shapes.
+            if isinstance(parsed, dict):
+                # Pick the first list-valued key, fallback to empty list
+                entries = []
+                for _key, val in parsed.items():
+                    if isinstance(val, list):
+                        entries = val
+                        break
+            elif isinstance(parsed, list):
+                entries = parsed
+            else:
+                logger.error(f"LLM did not return a list or wrapper object: {type(parsed)}")
                 raise ValueError("LLM did not return a JSON array")
-            
-            # Validate entry structure
+
             validated_entries = []
             for entry in entries:
                 if not isinstance(entry, dict):
                     logger.warning(f"Skipping non-dict entry: {entry}")
                     continue
-                
-                # Ensure required fields exist with proper types
+
                 validated = {
                     "item": entry.get("item"),
                     "quantity": entry.get("quantity"),
@@ -223,37 +279,33 @@ Return ONLY a JSON array of entries.
                     "type": entry.get("type", "unclear"),
                     "confidence": entry.get("confidence", "low")
                 }
-                
-                # Validate type field
-                valid_types = {"sale", "expense", "debt_owed_to_me", "debt_i_owe", 
+
+                valid_types = {"sale", "expense", "debt_owed_to_me", "debt_i_owe",
                                "debt_paid", "correction", "delete_last", "unclear"}
                 if validated["type"] not in valid_types:
                     logger.warning(f"Invalid type '{validated['type']}', defaulting to 'unclear'")
                     validated["type"] = "unclear"
-                
-                # Validate confidence field
+
                 if validated["confidence"] not in {"high", "low"}:
                     logger.warning(f"Invalid confidence '{validated['confidence']}', defaulting to 'low'")
                     validated["confidence"] = "low"
-                
-                # Ensure amount is null if unclear
+
                 if validated["amount"] is not None and not isinstance(validated["amount"], (int, float)):
                     logger.warning(f"Invalid amount type {type(validated['amount'])}, setting to null")
                     validated["amount"] = None
-                
+
                 validated_entries.append(validated)
-            
+
             logger.info(f"Successfully extracted {len(validated_entries)} entries from LLM")
             return validated_entries, raw_output
-            
+
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM JSON response: {e}")
             logger.error(f"Raw output was: {raw_output}")
             raise RuntimeError(f"Invalid JSON from LLM: {e}")
-        
+
     except Exception as e:
         logger.error(f"LLM extraction failed: {e}")
-        # Re-raise the original exception type if it's ValueError, otherwise wrap in RuntimeError
         if isinstance(e, ValueError):
             raise
         raise RuntimeError(f"LLM extraction failed: {e}") from e
@@ -262,18 +314,18 @@ Return ONLY a JSON array of entries.
 def extract_entries_llm_safe(transcript: str, language: str) -> tuple[List[Dict[str, Any]], str]:
     """
     Safe wrapper for extract_entries_llm that handles all errors gracefully.
-    
+
     If the LLM call fails for any reason (timeout, API error, rate limit, network error,
     malformed response, invalid JSON, unexpected structure), this function returns
     an "unclear" entry with low confidence instead of crashing.
-    
+
     Parameters
     ----------
     transcript : str
         The text transcript from ASR
     language : str
         Language code
-    
+
     Returns
     -------
     tuple[list[dict], str]

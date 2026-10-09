@@ -5,8 +5,9 @@ python-dotenv==1.2.3
 psycopg2-binary==2.9.9
 openpyxl==3.1.5
 openai>=1.50
-transformers>=4.40.0
-torch>=2.0.0
-torchaudio>=2.0.0
-librosa>=0.10.0
-soundfile>=0.12.0
+transformers==4.45.1
+librosa==0.10.2.post1
+soundfile==0.12.1
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.1
+torchaudio==2.4.1

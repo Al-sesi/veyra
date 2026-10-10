@@ -392,6 +392,14 @@ def _load_pipeline(lang_code: str, max_retries: int = 5, retry_delay: float = 5.
     logger.info(f"Loading ASR model {model_name} for language {lang_code}...")
     logger.info(f"HF_HOME: {os.environ.get('HF_HOME', 'not set')}")
     logger.info(f"TRANSFORMERS_CACHE: {os.environ.get('TRANSFORMERS_CACHE', 'not set')}")
+    logger.info(f"HF_TOKEN: {'set' if os.environ.get('HF_TOKEN') else 'not set'}")
+
+    # Set Hugging Face token if available for authenticated downloads
+    hf_token = os.environ.get("HF_TOKEN")
+    if hf_token:
+        from huggingface_hub import login
+        login(token=hf_token)
+        logger.info("Hugging Face authentication enabled")
 
     # Exact usage pattern from all four NCAIR1 model cards ("Basic Usage"
     # section), e.g.:

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.6
 
-FROM python:3.11-slim-bookworm AS base
+# Use pre-built PyTorch image (has torch already installed)
+FROM pytorch/pytorch:2.4.1-cpu AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -12,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     VEYRA_DB_PATH=/data/ledger.db \
     PORT=7860
 
+# Install additional system dependencies
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
         ffmpeg \
@@ -27,7 +29,7 @@ WORKDIR /app
 
 COPY requirements.txt ./requirements.txt
 
-# Install PyTorch CPU wheel first (index URL in requirements.txt), then the rest.
+# Install only the additional dependencies (torch is already in base image)
 RUN pip install --upgrade pip setuptools wheel \
  && pip install -r requirements.txt
 

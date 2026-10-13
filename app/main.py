@@ -70,7 +70,7 @@ _local_origins = [
 _production_origins = [
     "https://veyra-1.vercel.app",
     "https://veyra11.vercel.app",
-    "https://veyra-plan-fvbghtgphfh3h4as.southafricanorth-01.azurewebsites.net",
+    "https://ca-veyra-backend.livelysand-b99847dc.southafricanorth.azurecontainerapps.io",
 ]
 app.add_middleware(
     CORSMiddleware,

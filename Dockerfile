@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1.6
 
-# Use pre-built PyTorch image (has torch already installed)
-FROM pytorch/pytorch:2.4.1-cpu AS base
+FROM python:3.11-slim-bookworm AS base
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -13,7 +12,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     VEYRA_DB_PATH=/data/ledger.db \
     PORT=7860
 
-# Install additional system dependencies
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
         ffmpeg \
@@ -29,9 +27,11 @@ WORKDIR /app
 
 COPY requirements.txt ./requirements.txt
 
-# Install only the additional dependencies (torch is already in base image)
+# Install dependencies with caching
 RUN pip install --upgrade pip setuptools wheel \
- && pip install -r requirements.txt
+ && pip install --no-cache-dir torch==2.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+ && pip install --no-cache-dir torchaudio==2.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+ && pip install --no-cache-dir -r requirements.txt
 
 # Copy the FastAPI app (keep runtime slim).
 COPY app/ ./app/

@@ -10,4 +10,3 @@ librosa==0.10.2.post1
 soundfile==0.12.1
 imageio-ffmpeg==0.5.1
 huggingface-hub>=0.20.0
-torchaudio==2.4.1

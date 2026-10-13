@@ -107,8 +107,9 @@ def add_entries(
             with conn.cursor() as cur:
                 insert_sql = """
                     INSERT INTO entries (user_id, item, quantity, amount, type,
-                                     transcript, audio_file, status, detected_language)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                     transcript, audio_file, status, detected_language,
+                                     created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     RETURNING id;
                 """
                 inserted_ids = []
@@ -146,8 +147,9 @@ def add_entries(
         else:
             insert_sql = """
                 INSERT INTO entries (user_id, item, quantity, amount, type,
-                                 transcript, audio_file, status, detected_language)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                                 transcript, audio_file, status, detected_language,
+                                 created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'));
             """
             rows: list[tuple] = []
             for e in entries:
@@ -249,8 +251,8 @@ def correct_last_entry(
                     """
                     INSERT INTO entries (user_id, item, quantity, amount, type,
                                          transcript, audio_file, status,
-                                         replaces_entry_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s)
+                                         replaces_entry_id, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s, NOW())
                     RETURNING id;
                     """,
                     (
@@ -277,8 +279,8 @@ def correct_last_entry(
                 """
                 INSERT INTO entries (user_id, item, quantity, amount, type,
                                      transcript, audio_file, status,
-                                     replaces_entry_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?);
+                                     replaces_entry_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, datetime('now'));
                 """,
                 (
                     uid,
@@ -380,8 +382,8 @@ def add_debt(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO debts (user_id, person, amount, direction, status)
-                    VALUES (%s, %s, %s, %s, 'open')
+                    INSERT INTO debts (user_id, person, amount, direction, status, created_at)
+                    VALUES (%s, %s, %s, %s, 'open', NOW())
                     RETURNING id;
                     """,
                     (uid, name, int(amount), direction),
@@ -390,8 +392,8 @@ def add_debt(
         else:
             cur = conn.execute(
                 """
-                INSERT INTO debts (user_id, person, amount, direction, status)
-                VALUES (?, ?, ?, ?, 'open');
+                INSERT INTO debts (user_id, person, amount, direction, status, created_at)
+                VALUES (?, ?, ?, ?, 'open', datetime('now'));
                 """,
                 (uid, name, int(amount), direction),
             )
@@ -1329,8 +1331,8 @@ def _get_or_create_debtor(
                 # Create new debtor
                 cur.execute(
                     """
-                    INSERT INTO debtors (user_id, canonical_name, original_name)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO debtors (user_id, canonical_name, original_name, created_at)
+                    VALUES (%s, %s, %s, NOW())
                     RETURNING id;
                     """,
                     (uid, name_normalized, name_normalized),
@@ -1355,8 +1357,8 @@ def _get_or_create_debtor(
             # Create new debtor
             cur = conn.execute(
                 """
-                INSERT INTO debtors (user_id, canonical_name, original_name)
-                VALUES (?, ?, ?);
+                INSERT INTO debtors (user_id, canonical_name, original_name, created_at)
+                VALUES (?, ?, ?, datetime('now'));
                 """,
                 (uid, name_normalized, name_normalized),
             )
@@ -1404,8 +1406,8 @@ def add_debt_transaction(
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes)
-                    VALUES (%s, %s, %s, %s, %s)
+                    INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes, created_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
                     RETURNING id;
                     """,
                     (debtor_id, int(amount), direction, transaction_type, notes),
@@ -1418,8 +1420,8 @@ def add_debt_transaction(
         else:
             cur = conn.execute(
                 """
-                INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes)
-                VALUES (?, ?, ?, ?, ?);
+                INSERT INTO debt_transactions (debtor_id, amount, direction, transaction_type, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, datetime('now'));
                 """,
                 (debtor_id, int(amount), direction, transaction_type, notes),
             )

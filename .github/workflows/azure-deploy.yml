@@ -60,6 +60,7 @@ jobs:
       - name: Deploy new revision to Container App
         if: env.AZURE_CLIENT_ID != ''
         run: |
+          az extension add --name containerapp --upgrade --only-show-errors
           az containerapp update \
             --name ${{ env.CONTAINER_APP }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \

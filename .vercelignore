@@ -1,0 +1,15 @@
+# Vercel serves only the static site; /api is proxied to the Azure backend (see vercel.json).
+# Keep the Python backend out so Vercel doesn't bundle it as a >500MB function.
+api/
+app/
+application.py
+requirements*.txt
+runtime.txt
+Dockerfile
+startup.sh
+render-build.sh
+render.yaml
+render-test-upload/
+azure/
+scripts/
+tests/

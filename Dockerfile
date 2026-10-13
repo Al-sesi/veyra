@@ -29,13 +29,12 @@ COPY requirements.txt ./requirements.txt
 
 # Install dependencies with caching
 RUN pip install --upgrade pip setuptools wheel \
- && pip install --no-cache-dir torch==2.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
- && pip install --no-cache-dir torchaudio==2.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
+ && pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.4.1 torchaudio==2.4.1 \
  && pip install --no-cache-dir -r requirements.txt
 
 # Copy the FastAPI app (keep runtime slim).
 COPY app/ ./app/
-COPY runtime.txt ./runtime.txt 2>/dev/null || true
+COPY runtime.txt ./runtime.txt
 
 # Ensure HF cache dir + ledger dir exist (bound to persistent /data on HF Spaces)
 RUN mkdir -p /data/hf-cache

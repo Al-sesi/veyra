@@ -100,51 +100,69 @@ def add_entries(
     entries = list(entries)
     if not entries:
         return []
-    uid = _require_user(db_path, user_id)
 
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             with conn.cursor() as cur:
-                insert_sql = """
+                if user_id is not None:
+                    cur.execute(
+                        "INSERT INTO users (id, phone_or_name, language) "
+                        "VALUES (%s, %s, %s) "
+                        "ON CONFLICT (id) DO NOTHING;",
+                        (int(user_id), f"user_{user_id}", "en"),
+                    )
+                    uid = int(user_id)
+                else:
+                    cur.execute(
+                        "INSERT INTO users (phone_or_name, language) "
+                        "VALUES (%s, %s) RETURNING id;",
+                        ("unknown", "en"),
+                    )
+                    uid = int(cur.fetchone()["id"])
+
+                placeholders = ",".join(
+                    ["(%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())"] * len(entries)
+                )
+                params: list[Any] = []
+                for e in entries:
+                    qty = e.get("quantity")
+                    params.extend([
+                        uid,
+                        str(e.get("item", "") or "").strip() or "unknown",
+                        None if qty is None else float(qty),
+                        int(e["amount"]),
+                        str(e.get("type", "sale")),
+                        transcript or "",
+                        audio_file or "",
+                        "active",
+                        detected_language,
+                    ])
+                cur.execute(
+                    f"""
                     INSERT INTO entries (user_id, item, quantity, amount, type,
                                      transcript, audio_file, status, detected_language,
                                      created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    VALUES {placeholders}
                     RETURNING id;
-                """
-                inserted_ids = []
-                for e in entries:
-                    qty = e.get("quantity")
-                    cur.execute(
-                        insert_sql,
-                        (
-                            uid,
-                            str(e.get("item", "") or "").strip() or "unknown",
-                            None if qty is None else float(qty),
-                            int(e["amount"]),
-                            str(e.get("type", "sale")),
-                            transcript or "",
-                            audio_file or "",
-                            "active",
-                            detected_language,
-                        )
-                    )
-                    inserted_ids.append(cur.fetchone()["id"])
-                
-                # Fetch the inserted rows
+                    """,
+                    params,
+                )
+                inserted_ids = [row["id"] for row in cur.fetchall()]
+
                 if inserted_ids:
-                    placeholders = ','.join(['%s'] * len(inserted_ids))
+                    ph = ",".join(["%s"] * len(inserted_ids))
                     cur.execute(
                         f"""
                         SELECT * FROM entries
-                        WHERE id IN ({placeholders}) AND user_id = %s
+                        WHERE id IN ({ph}) AND user_id = %s
                         ORDER BY id ASC;
                         """,
-                        inserted_ids + [uid]
+                        inserted_ids + [uid],
                     )
                     return [row_to_dict(row) for row in cur.fetchall()]
                 return []
         else:
+            uid = _require_user(db_path, user_id)
             insert_sql = """
                 INSERT INTO entries (user_id, item, quantity, amount, type,
                                  transcript, audio_file, status, detected_language,
@@ -630,7 +648,7 @@ def get_summary(
     """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
-    uid = _require_user(db_path, user_id)
+    uid = user_id
     days = max(1, int(days))
 
     with get_connection(db_path) as conn:
@@ -967,7 +985,7 @@ def get_stock_levels(
     """
     if db_path is None:
         db_path = DEFAULT_DB_PATH
-    uid = _require_user(db_path, user_id)
+    uid = user_id
     
     with get_connection(db_path) as conn:
         if USE_POSTGRES:

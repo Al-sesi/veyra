@@ -45,7 +45,6 @@ from app.ledger import (
     delete_last_entry,
     get_expense_breakdown,
     get_stock_levels,
-    get_summary,
     get_top_items,
     get_user_by_id,
     mark_debt_paid,
@@ -300,19 +299,17 @@ def _response(
 ) -> dict[str, Any]:
     """Build the pipeline result.
 
-    `saved=True` means the action wrote to the ledger, so we return the real
-    summary; otherwise nothing was persisted and the summary is zeroed (and
-    no DB reads happen, so an unclear note never even creates a user row).
+    The summary is intentionally *not* computed here.  The demo frontend
+    re-fetches it via GET /summary/{uid} immediately after receiving this
+    response, and the WhatsApp webhook only reads ``reply_text``.  Computing
+    it here would add 5+ cross-region DB queries for data that is thrown
+    away.  Callers that need a summary should fetch it explicitly.
     """
-    if saved and uid is not None:
-        summary = get_summary(user_id=uid, db_path=db_path)
-    else:
-        summary = _empty_summary()
     return {
         "user_id": uid,
         "transcript": transcript,
         "entries": entries or [],
-        "summary": summary,
+        "summary": _empty_summary(),
         "reply_text": reply,
         "language_notice": language_notice_text,
         "detected_language": detected_language,

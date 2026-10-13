@@ -288,6 +288,7 @@ def test_pipeline_process_saves_and_returns_summary(
     sample_audio: Path, tmp_db: Path, _patch_db, _mock_asr
 ):
     from app.pipeline import process_voice_note
+    from app.ledger import get_summary
 
     result = process_voice_note(str(sample_audio), language="en", user_id=42)
     assert result["transcript"] == TRANSCRIPT_RETURN
@@ -295,10 +296,12 @@ def test_pipeline_process_saves_and_returns_summary(
     # 3 entries from the mocked transcript: rice/transport/snacks
     amounts = sorted(e["amount"] for e in result["entries"])
     assert amounts == [2000, 5000, 45000]
-    # Summary now reflects these additions
-    assert result["summary"]["total_sales"] == 45000
-    assert result["summary"]["total_expenses"] == 2000 + 5000
-    assert result["summary"]["profit"] == 45000 - 7000
+    # Summary is no longer computed in the pipeline response (frontend fetches
+    # it separately), so verify it directly via the ledger function.
+    summary = get_summary(user_id=42, db_path=tmp_db)
+    assert summary["total_sales"] == 45000
+    assert summary["total_expenses"] == 2000 + 5000
+    assert summary["profit"] == 45000 - 7000
     # Saved rows have transcript + audio_file filled in
     rice = next(e for e in result["entries"] if e["amount"] == 45000)
     assert rice["transcript"] == TRANSCRIPT_RETURN
@@ -341,7 +344,10 @@ def test_api_post_voice_note_full_flow(client, sample_audio: Path, tmp_db: Path)
     assert body["transcript"] == TRANSCRIPT_RETURN
     amounts = sorted(e["amount"] for e in body["entries"])
     assert amounts == [2000, 5000, 45000]
-    assert body["summary"]["profit"] == 45000 - (2000 + 5000)
+    # Summary is fetched separately by the frontend; verify via /summary endpoint
+    s_resp = client.get("/summary/7?days=7")
+    assert s_resp.status_code == 200
+    assert s_resp.json()["profit"] == 45000 - (2000 + 5000)
 
 
 def test_api_get_ledger(client, sample_audio: Path):
@@ -408,7 +414,10 @@ def test_api_text_message_english(client, tmp_db: Path):
     assert body["entries"][0]["item"] == "Rice"
     assert body["entries"][0]["amount"] == 5000
     assert body["entries"][0]["type"] == "expense"
-    assert body["summary"]["total_expenses"] == 5000
+    # Summary is fetched separately by the frontend; verify via /summary endpoint
+    s_resp = client.get("/summary/1?days=7")
+    assert s_resp.status_code == 200
+    assert s_resp.json()["total_expenses"] == 5000
 
 
 def test_api_text_message_pidgin(client, tmp_db: Path):
@@ -484,8 +493,12 @@ def test_api_text_message_multiple_entries(client, tmp_db: Path):
     assert len(body["entries"]) == 2
     amounts = sorted(e["amount"] for e in body["entries"])
     assert amounts == [3000, 45000]
-    assert body["summary"]["total_sales"] == 45000
-    assert body["summary"]["total_expenses"] == 3000
+    # Summary is fetched separately by the frontend; verify via /summary endpoint
+    s_resp = client.get("/summary/6?days=7")
+    assert s_resp.status_code == 200
+    s = s_resp.json()
+    assert s["total_sales"] == 45000
+    assert s["total_expenses"] == 3000
 
 
 def test_api_text_message_unclear_returns_no_entries(client, tmp_db: Path):

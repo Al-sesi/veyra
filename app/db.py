@@ -73,29 +73,65 @@ def _connect_postgres(database_url: str):
     return conn
 
 
+_pg_pool = None
+_pg_pool_url = None
+
+
+def _get_pg_pool(database_url: str):
+    """Return a shared ThreadedConnectionPool, creating it on first use.
+
+    A persistent pool avoids the ~150-300ms TCP+TLS handshake cost that
+    ``psycopg2.connect`` incurs on every call when the DB is in a different
+    region from the app container.
+    """
+    global _pg_pool, _pg_pool_url
+    if _pg_pool is None or _pg_pool_url != database_url:
+        import psycopg2.pool
+        import psycopg2.extras
+
+        minconn = 1
+        maxconn = int(os.environ.get("PG_POOL_MAX", "10"))
+        _pg_pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn,
+            maxconn,
+            database_url,
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        )
+        _pg_pool_url = database_url
+    return _pg_pool
+
+
 @contextmanager
 def get_connection(db_path: str | Path | None = None) -> Iterator:
     """Context manager yielding a live database connection (Postgres or SQLite).
 
     Commits on clean exit, rolls back if an exception is raised, and always
-    closes the connection.
+    returns the connection to the pool (Postgres) or closes it (SQLite).
 
     `db_path=None` means DEFAULT_DB_PATH for SQLite, or DATABASE_URL for Postgres.
     If DATABASE_URL is set, Postgres is used regardless of db_path parameter.
     """
     if USE_POSTGRES:
-        conn = _connect_postgres(DATABASE_URL)
+        pool = _get_pg_pool(DATABASE_URL)
+        conn = pool.getconn()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            pool.putconn(conn)
     else:
         conn = _connect_sqlite(DEFAULT_DB_PATH if db_path is None else db_path)
-    
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
 
 # SQLite schema (uses SQLite-specific syntax)

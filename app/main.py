@@ -275,6 +275,13 @@ async def voice_note(
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            import traceback
+            logger.exception("voice-note pipeline failed (transcript path)")
+            raise HTTPException(
+                status_code=500,
+                detail=f"{exc.__class__.__name__}: {exc}",
+            ) from exc
 
     # Otherwise process audio file
     if not file:
@@ -316,6 +323,12 @@ async def voice_note(
     except ValueError as exc:
         # Unknown language code, etc.
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("voice-note pipeline failed (audio path)")
+        raise HTTPException(
+            status_code=500,
+            detail=f"{exc.__class__.__name__}: {exc}",
+        ) from exc
     finally:
         if tmp_path.exists():
             tmp_path.unlink(missing_ok=True)

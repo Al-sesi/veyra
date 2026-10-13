@@ -35,7 +35,7 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # Copy the FastAPI app (keep runtime slim).
 COPY app/ ./app/
-COPY runtime.txt ./runtime.txt 2>/dev/null || true
+COPY runtime.txt ./runtime.txt
 
 # Ensure HF cache dir + ledger dir exist (bound to persistent /data on HF Spaces)
 RUN mkdir -p /data/hf-cache

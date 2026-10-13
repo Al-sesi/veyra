@@ -29,6 +29,7 @@ from typing import Any, Optional
 from io import BytesIO
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
@@ -263,7 +264,7 @@ async def voice_note(
                 transcript=transcript,
             )
             return JSONResponse(
-                {
+                jsonable_encoder({
                     "user_id": result["user_id"],
                     "transcript": result["transcript"],
                     "entries": result["entries"],
@@ -271,7 +272,7 @@ async def voice_note(
                     "reply_text": result["reply_text"],
                     "language_notice": result.get("language_notice"),
                     "detected_language": lang,
-                }
+                })
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -308,7 +309,7 @@ async def voice_note(
             user_id=uid,
         )
         return JSONResponse(
-            {
+            jsonable_encoder({
                 "user_id": result["user_id"],
                 "transcript": result["transcript"],
                 "entries": result["entries"],
@@ -316,7 +317,7 @@ async def voice_note(
                 "reply_text": result["reply_text"],
                 "language_notice": result.get("language_notice"),
                 "detected_language": lang,
-            }
+            })
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -381,7 +382,7 @@ async def text_message(
             transcript=text,
         )
         return JSONResponse(
-            {
+            jsonable_encoder({
                 "user_id": result["user_id"],
                 "transcript": result["transcript"],
                 "entries": result["entries"],
@@ -389,7 +390,7 @@ async def text_message(
                 "reply_text": result["reply_text"],
                 "language_notice": result.get("language_notice"),
                 "detected_language": lang,
-            }
+            })
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

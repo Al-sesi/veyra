@@ -23,10 +23,6 @@ jobs:
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 
-    container:
-      image: docker:24-cli
-      options: --privileged
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

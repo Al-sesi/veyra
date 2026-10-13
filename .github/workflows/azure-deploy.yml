@@ -6,14 +6,22 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   REGISTRY: acrveyra.azurecr.io
   IMAGE_NAME: veyra-backend
+  RESOURCE_GROUP: rg-veyra
+  CONTAINER_APP: ca-veyra-backend
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
 
     steps:
       - name: Checkout code
@@ -31,5 +39,41 @@ jobs:
 
       - name: Build and push image
         run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+          docker build \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Skip deploy (Azure OIDC secrets not configured)
+        if: env.AZURE_CLIENT_ID == ''
+        run: echo "::warning::AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_SUBSCRIPTION_ID not set; image pushed but Container App not updated."
+
+      - name: Azure login (OIDC)
+        if: env.AZURE_CLIENT_ID != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy new revision to Container App
+        if: env.AZURE_CLIENT_ID != ''
+        run: |
+          az extension add --name containerapp --upgrade --only-show-errors
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Health check
+        if: env.AZURE_CLIENT_ID != ''
+        run: |
+          fqdn=$(az containerapp show -n ${{ env.CONTAINER_APP }} -g ${{ env.RESOURCE_GROUP }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          for i in $(seq 1 30); do
+            if curl -fsS -m 30 "https://$fqdn/health"; then echo; exit 0; fi
+            sleep 20
+          done
+          echo "::error::https://$fqdn/health did not return 200 within 10 minutes"
+          exit 1

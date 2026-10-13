@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://ca-veyra-backend.livelysand-b99847dc.southafricanorth.azurecontainerapps.io/$1"
+    }
+  ]
+}

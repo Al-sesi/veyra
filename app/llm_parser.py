@@ -81,6 +81,51 @@ NATURAL LANGUAGE UNDERSTANDING:
 - Understand code-switching (mixing languages in one sentence)
 - If the context clearly indicates a purchase/expense with an amount, extract it as an expense
 
+NIGERIAN MARKET TERMINOLOGY:
+- "clear" = sell/sold (e.g., "I clear 5 bags rice")
+- "move" = sell/sold (e.g., "I move goods for 45k")
+- "bag" = sell in bags (e.g., "bagged rice 5k per bag")
+- "settle" = pay (e.g., "settle bike man 500")
+- "bring money" = payment received (e.g., "customer bring money 10k")
+- "balance" = remaining payment (e.g., "balance 5k")
+- "on credit" = debt/owing (e.g., "take on credit")
+- "now now" = immediately/cash payment
+- "later" = credit/debt
+- "dash" = give for free/discount
+- "carry" = buy/take (e.g., "carry 2 bags")
+- "offload" = sell large quantity
+- "load" = stock/inventory
+- "market women" = female customers
+- "mallam" = Hausa trader/customer
+- "mama" = older female customer
+- "baba" = older male customer
+- "brother" / "sister" = customer (respectful)
+
+SALES VARIATIONS (all mean SALE):
+- "I sold", "I clear", "I move", "I offload", "I dispose"
+- "Customer pay me", "bring money", "cash for", "money for"
+- "5 bags gone", "10 cartons clear", "stock finished"
+- "Make sale", "deal done", "transaction complete"
+
+EXPENSE VARIATIONS (all mean EXPENSE):
+- "I bought", "I purchase", "I acquire", "I get"
+- "I spent", "I pay", "I settle", "I dash out"
+- "Cost me", "price was", "amount is", "value"
+- "Transport fare", "bike money", "keke fee", "bus ticket"
+- "Shop rent", "market fee", "union dues", "loading charge"
+
+DEBT VARIATIONS:
+- "owe me", "still owe", "never pay", "balance on me"
+- "I owe", "dey owe", "credit", "take now pay later"
+- "don pay", "settled", "cleared", "balance paid"
+
+CODE-SWITCHING EXAMPLES:
+- "I sold rice for 5k, the customer happy" (English)
+- "I clear 5 bags rice, the customer dey happy" (Pidgin)
+- "Mo ta 5 apo irin, onibara n fara dara" (Yoruba)
+- "A sayar da guda 5, abokin ciniki ya fara cikin farin ciki" (Hausa)
+- "M ritere 5 sacks osikapa, onye ahia ji mma" (Igbo)
+
 TRANSACTION TYPES:
 - "sale": Selling items
 - "expense": Buying items or paying for services (transport, rent, etc.)
@@ -101,8 +146,17 @@ EXAMPLES:
 Input: "I sold rice for 5k"
 Output: [{"item": "rice", "quantity": null, "amount": 5000, "type": "sale", "confidence": "high"}]
 
+Input: "I clear 5 bags rice for 45k"
+Output: [{"item": "rice", "quantity": 5, "amount": 45000, "type": "sale", "confidence": "high"}]
+
+Input: "I move goods, customer pay me 10k"
+Output: [{"item": "goods", "quantity": null, "amount": 10000, "type": "sale", "confidence": "high"}]
+
 Input: "I bought chin chin, spent 2k"
 Output: [{"item": "chin chin", "quantity": null, "amount": 2000, "type": "expense", "confidence": "high"}]
+
+Input: "I settle bike man 500"
+Output: [{"item": "transport", "quantity": null, "amount": 500, "type": "expense", "confidence": "high"}]
 
 Input: "I got chin chin and paid 2,000"
 Output: [{"item": "chin chin", "quantity": null, "amount": 2000, "type": "expense", "confidence": "high"}]
@@ -112,6 +166,15 @@ Output: [{"item": "chin chin", "quantity": null, "amount": 2000, "type": "expens
 
 Input: "Mama Ngozi owes me 5k"
 Output: [{"item": "Mama Ngozi", "quantity": null, "amount": 5000, "type": "debt_owed_to_me", "confidence": "high"}]
+
+Input: "Mallam still dey owe me 15k"
+Output: [{"item": "Mallam", "quantity": null, "amount": 15000, "type": "debt_owed_to_me", "confidence": "high"}]
+
+Input: "I owe Baba Chukwu 10k"
+Output: [{"item": "Baba Chukwu", "quantity": null, "amount": 10000, "type": "debt_i_owe", "confidence": "high"}]
+
+Input: "Mama Ngozi don pay"
+Output: [{"item": "Mama Ngozi", "quantity": null, "amount": null, "type": "debt_paid", "confidence": "high"}]
 
 Input: "something unclear"
 Output: [{"item": null, "quantity": null, "amount": null, "type": "unclear", "confidence": "low"}]

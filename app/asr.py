@@ -550,8 +550,7 @@ def transcribe(audio_path: str, language: str) -> str:
     try:
         wav_path = _convert_to_wav_16k_mono(audio_path)
 
-        # Step 2: load audio array with librosa @ 16 kHz -- same call as
-        # the model-card examples (see docstring of _load_audio_array_16k).
+        # Step 2: load audio array with torchaudio @ 16 kHz -- faster than librosa
         audio_array, _sample_rate = _load_audio_array_16k(wav_path)
     finally:
         if wav_path is not None:
@@ -560,13 +559,63 @@ def transcribe(audio_path: str, language: str) -> str:
             except OSError:
                 pass
 
-    # Step 3: get/cache the pipeline and run inference.
-    pipe = _load_pipeline(lang_code)
-    result = pipe(audio_array)
+    # Step 3: Try N-ATLaS first (Nigerian-optimized models)
+    try:
+        pipe = _load_pipeline(lang_code)
+        result = pipe(audio_array)
+        text = (result or {}).get("text", "") or ""
+        text = text.strip()
 
-    # pipeline() returns dict like {"text": "..."}
-    text = (result or {}).get("text", "") or ""
-    return text.strip()
+        # If N-ATLaS returns empty or very short text, try OpenAI Whisper fallback
+        if len(text) < 5:
+            logger.warning(f"N-ATLaS returned short/empty text for {lang_code}, trying OpenAI Whisper fallback")
+            text = _transcribe_with_openai_whisper(audio_array, language)
+
+        return text
+    except Exception as e:
+        logger.warning(f"N-ATLaS transcription failed for {lang_code}: {e}, trying OpenAI Whisper fallback")
+        # Fallback to OpenAI Whisper
+        return _transcribe_with_openai_whisper(audio_array, language)
+
+
+def _transcribe_with_openai_whisper(audio_array, language: str) -> str:
+    """
+    Fallback transcription using OpenAI Whisper when N-ATLaS fails.
+
+    This provides high-quality transcription as a backup, though it's not
+    specifically optimized for Nigerian accents like N-ATLaS models.
+    """
+    try:
+        from transformers import pipeline
+
+        # Map language codes to Whisper language codes
+        lang_mapping = {
+            "ha": "ha",
+            "ig": "ig",
+            "yo": "yo",
+            "en": "en",
+            "pcm": "en",  # Pidgin uses English
+        }
+        whisper_lang = lang_mapping.get(language, "en")
+
+        logger.info(f"Using OpenAI Whisper fallback for language: {whisper_lang}")
+
+        # Use OpenAI's Whisper Small model (good balance of speed/accuracy)
+        whisper_pipe = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-small",
+            chunk_length_s=30,
+            device="cpu",
+            generate_kwargs={"language": whisper_lang, "task": "transcribe"}
+        )
+
+        result = whisper_pipe(audio_array)
+        text = (result or {}).get("text", "") or ""
+        return text.strip()
+
+    except Exception as e:
+        logger.error(f"OpenAI Whisper fallback also failed: {e}")
+        return ""  # Return empty string to signal complete failure
 
 
 def clear_model_cache() -> None:

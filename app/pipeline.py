@@ -614,76 +614,62 @@ def process_voice_note(
     # ------------------------------------------------------------------
     # New sale / expense (the default), or nothing understood
     # ------------------------------------------------------------------
-    parsed = parse_transcript(transcript)
+    # HYBRID APPROACH: Try LLM first for better NLU, fall back to rule-based if LLM fails
+    parsed = None
     failed_entries = []  # Track failed entries with reasons
     
-    # LLM fallback: trigger when rule-based parser returns zero entries
-    should_use_llm_fallback = False
-    llm_trigger_reason = ""
-    
-    if not parsed:
-        # Rule-based parser found nothing - try LLM
-        should_use_llm_fallback = True
-        llm_trigger_reason = "no entries from rule-based parser"
-        logger.info("Rule-based parser returned no entries, trying LLM fallback")
-    
-    if should_use_llm_fallback:
-        try:
-            logger.info(f"Attempting LLM fallback for transcript: {transcript[:100]}...")
-            llm_entries, raw_llm_output = extract_entries_llm_safe(transcript, language)
-            
-            # Log the LLM extraction attempt
-            overall_confidence = "low" if any(e.get("confidence") == "low" for e in llm_entries) else "high"
-            
-            # Filter out unclear entries from LLM results and track failures
-            valid_llm_entries = []
-            for entry in llm_entries:
-                if entry.get("type") == "unclear":
-                    failed_entries.append({
-                        "segment": transcript[:50] + "..." if len(transcript) > 50 else transcript,
-                        "reason": _get_failure_message("llm_failed", language)
-                    })
-                elif entry.get("amount") is None:
-                    failed_entries.append({
-                        "segment": entry.get("item", "unknown") if entry.get("item") else "unknown",
-                        "reason": _get_failure_message("ambiguous_amount", language)
-                    })
-                else:
-                    valid_llm_entries.append(entry)
-            
-            # Log to database
-            try:
-                log_llm_extraction(
-                    user_id=user_id,
-                    transcript=transcript,
-                    language=language,
-                    raw_llm_output=raw_llm_output,
-                    entries_extracted=llm_entries,
-                    confidence=overall_confidence,
-                    rule_based_parser_tried_first=True,
-                    rule_based_parser_failed=True,
-                    db_path=db_path
-                )
-            except Exception as log_error:
-                logger.warning(f"Failed to log LLM extraction: {log_error}")
-            
-            if valid_llm_entries:
-                logger.info(f"LLM fallback extracted {len(valid_llm_entries)} valid entries")
-                parsed = valid_llm_entries
+    # Try LLM first (better natural language understanding)
+    try:
+        logger.info(f"Attempting LLM extraction for transcript: {transcript[:100]}...")
+        llm_entries, raw_llm_output = extract_entries_llm_safe(transcript, language)
+        
+        # Log the LLM extraction attempt
+        overall_confidence = "low" if any(e.get("confidence") == "low" for e in llm_entries) else "high"
+        
+        # Filter out unclear entries from LLM results and track failures
+        valid_llm_entries = []
+        for entry in llm_entries:
+            if entry.get("type") == "unclear":
+                failed_entries.append({
+                    "segment": transcript[:50] + "..." if len(transcript) > 50 else transcript,
+                    "reason": _get_failure_message("llm_failed", language)
+                })
+            elif entry.get("amount") is None:
+                failed_entries.append({
+                    "segment": entry.get("item", "unknown") if entry.get("item") else "unknown",
+                    "reason": _get_failure_message("ambiguous_amount", language)
+                })
             else:
-                logger.info("LLM fallback returned no valid entries, using unclear response")
-                # If we have specific failure reasons, use them; otherwise use generic unclear
-                if failed_entries:
-                    failure_msg = " ".join([f['reason'] for f in failed_entries])
-                    reply = failure_msg
-                else:
-                    reply = UNCLEAR_REPLY
-                return _response(transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text, detected_language=language)
-                
-        except Exception as e:
-            logger.warning(f"LLM fallback failed: {e}, falling back to unclear response")
-            llm_failure_msg = _get_failure_message("llm_failed", language)
-            return _response(transcript, user_id, db_path, llm_failure_msg, saved=False, language_notice_text=notice_text, detected_language=language)
+                valid_llm_entries.append(entry)
+        
+        # Log to database
+        try:
+            log_llm_extraction(
+                user_id=user_id,
+                transcript=transcript,
+                language=language,
+                raw_llm_output=raw_llm_output,
+                entries_extracted=llm_entries,
+                confidence=overall_confidence,
+                rule_based_parser_tried_first=False,
+                rule_based_parser_failed=False,
+                db_path=db_path
+            )
+        except Exception as log_error:
+            logger.warning(f"Failed to log LLM extraction: {log_error}")
+        
+        if valid_llm_entries and overall_confidence == "high":
+            logger.info(f"LLM extracted {len(valid_llm_entries)} high-confidence entries")
+            parsed = valid_llm_entries
+        else:
+            logger.info("LLM returned low confidence or no valid entries, trying rule-based parser")
+            # Fall back to rule-based parser
+            parsed = parse_transcript(transcript)
+            
+    except Exception as e:
+        logger.warning(f"LLM extraction failed: {e}, falling back to rule-based parser")
+        # Fall back to rule-based parser on any error
+        parsed = parse_transcript(transcript)
     
     if not parsed:
         return _response(transcript, user_id, db_path, UNCLEAR_REPLY, saved=False, language_notice_text=notice_text, detected_language=language)

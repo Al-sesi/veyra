@@ -17,6 +17,7 @@ unclear path writes NOTHING to the database.
 from __future__ import annotations
 
 import logging
+import random
 from pathlib import Path
 from typing import Any, Optional
 
@@ -32,6 +33,7 @@ from app.intents import (
     extract_amount,
     extract_person,
     EXPENSE_BREAKDOWN_INTENT,
+    GREETING_INTENT,
     HELP_INTENT,
     MENU_INTENT,
     REQUEST_HISTORY_INTENT,
@@ -84,6 +86,67 @@ DEBT_MISSING_DETAILS_REPLY = (
     "Try: \"Mama Ngozi owes me 5k\"."
 )
 NO_DEBT_PERSON_REPLY = "I couldn't tell who paid. Try: \"Mama Ngozi don pay\"."
+
+TRANSCRIPTION_CORRECTION_REPLIES = {
+    "en": [
+        "I see you're correcting the transcription. Let me process that instead.",
+        "Got it, let me use your correction instead of the voice transcription.",
+        "I understand you're fixing what I heard. Let me process your version.",
+    ],
+    "pcm": [
+        "I see say you dey correct the transcription. Make I process your own instead.",
+        "Got it, make I use your correction instead of the voice transcription.",
+        "I understand say you dey fix wetin I hear. Make I process your own.",
+    ],
+    "yo": [
+        "Mo ri pé ọ ń ṣe àtúnṣe àgbèrò. Jẹ́ kí n ṣe àyọkò àti rẹ dipo.",
+        "Got it, jẹ́ kí n lo àtúnṣe rẹ dipo àgbèrò ohùn.",
+        "Mo gbọ́ pé ọ ń ṣe àtúnṣe ohun tí mo gbọ́. Jẹ́ kí n ṣe àyọkò àti rẹ.",
+    ],
+    "ha": [
+        "Ina gan cewa kana yi gyaran aiko. Zan yi tsari na maimakon.",
+        "Got it, zan yi amfani da gyarewar ku maimakon aikin murya.",
+        "Ina fahimtar kana gyara abin na ji na. Zan yi tsari na maimakon.",
+    ],
+    "ig": [
+        "A hụrụ na ị na-emegharị transkripshọn. Ka m wee n'ụzọ gị kama.",
+        "Got it, ka m jiri nchekota gị kama transkripshọn olu.",
+        "A ghọtaghị na ị na-emezi ihe m nụrụ. Ka m wee n'ụzọ gị.",
+    ],
+}
+
+GREETING_REPLIES = {
+    "en": [
+        "Hello! What can I do for you?",
+        "Hi there! How can I help you today?",
+        "Hey! What's on your mind?",
+        "Good to hear from you! What can I help you with?",
+    ],
+    "pcm": [
+        "Hello! Wetin I fit do for you?",
+        "Hi there! How I fit help you today?",
+        "Hey! Wetin dey your mind?",
+        "Good to hear from you! Wetin I fit help you with?",
+    ],
+    "yo": [
+        "Ẹ kú àáwọ́! Kí n ṣe eléyìí tí ó wúlò fún ọ?",
+        "Kààbọ̀! Báwo ni mo lè rán ọ lọ́wọ́ láì?",
+        "Hey! Kí n wà núkẹyìn?",
+        "Dáadáa láti gbọ́ kí ó tó! Kí n ṣe eléyìí tí mo lè rán ọ lọ́wọ́?",
+    ],
+    "ha": [
+        "Sannu! Menene zaka iya yi?",
+        "Sannu da zuwa! Yaya zaka iya taimaka ka yau?",
+        "Hey! Me ake tsammani?",
+        "Yakamar da jin hadu da ku! Menene zaka iya taimaka?",
+    ],
+    "ig": [
+        "Kedu! Kedu ihe m ga-eme gị?",
+        "Ndewo! Kedu m ga-enyere gị aka taa?",
+        "Hey! Ihe di n'uche gị?",
+        "Oma ile gị! Kedu ihe m ga-enyere gị aka?",
+    ],
+}
 
 HELP_FAQ_REPLY = (
     "Here is what you need to know about Veyra right now:\n"
@@ -263,6 +326,121 @@ def _build_success_reply(entries: list[dict[str, Any]], language: str) -> str:
     return f"{templates['recorded']}: {entries_text} 👍"
 
 
+def _get_greeting_reply(language: str) -> str:
+    """Get a random natural greeting response in the specified language."""
+    greeting_replies = GREETING_REPLIES.get(language, GREETING_REPLIES["en"])
+    return random.choice(greeting_replies)
+
+
+def _generate_clarification(transcript: str, language: str) -> str:
+    """Generate a clarification prompt when an entry is unclear.
+    
+    This function tries to understand what the user might have meant
+    and asks for confirmation, being tolerant of grammatical errors.
+    """
+    import re
+    from app.parser import find_numeric_phrases
+    
+    # Try to extract any numbers that might be amounts
+    amounts = find_numeric_phrases(transcript)
+    amount_text = ""
+    if amounts:
+        amount_val = amounts[0]["value"]
+        amount_text = f" ₦{format_naira(int(amount_val))}"
+    
+    # Try to extract potential item/person names (remove common words)
+    words = re.findall(r"[^\W\d_][\w'\-]*", transcript, flags=re.UNICODE)
+    # Filter out very short words and common stopwords
+    potential_names = [w for w in words if len(w) >= 3 and w.lower() not in 
+                     {"the", "and", "for", "with", "from", "have", "has", "had", 
+                      "was", "were", "been", "being", "do", "does", "did", "will",
+                      "would", "can", "could", "should", "may", "might", "must",
+                      "this", "that", "these", "those", "what", "which", "who",
+                      "when", "where", "why", "how", "all", "any", "some", "no",
+                      "not", "only", "very", "just", "also", "back", "after", "before"}]
+    
+    name_text = ""
+    if potential_names:
+        # Take the first 2-3 most likely names
+        name_text = " ".join(potential_names[:3])
+    
+    # Generate clarification based on what we found
+    clarifications = {
+        "en": [
+            f"I'm not sure I understood. Are you trying to say something about {name_text}{amount_text}?",
+            f"I didn't quite catch that. Did you mean to record {name_text}{amount_text}?",
+            f"Could you clarify? I heard something about {name_text}{amount_text}.",
+            f"I'm having trouble understanding. Were you talking about {name_text}{amount_text}?",
+            f"If the transcription is wrong, just type what you actually said and I'll use that instead.",
+        ],
+        "pcm": [
+            f"I no sure say I understand. You dey try to talk about {name_text}{amount_text}?",
+            f"I no hear am well. You mean say make I record {name_text}{amount_text}?",
+            f"Abeg explain well. I hear something about {name_text}{amount_text}.",
+            f"I dey find am hard to understand. You dey talk about {name_text}{amount_text}?",
+            f"If the transcription no correct, just type wetin you actually talk and I go use that instead.",
+        ],
+        "yo": [
+            f"Mo kò gbọ́rò. Ṣe o ń sọ nǹkan nípa {name_text}{amount_text}?",
+            f"Mo kò gbọ́ dáadáa. Ṣe o ń wọ́n láti kọ̀wé {name_text}{amount_text}?",
+            f"Jọ́wọ́ ṣe alágbára. Mo gbọ́ nǹkan nípa {name_text}{amount_text}.",
+            f"Mo ń wà nínú ìbànújẹ́. Ṣe o ń sọ̀rọ̀ nípa {name_text}{amount_text}?",
+            f"Ti àgbèrò bá ṣe e, kọ nǹkan tí o sọ̣ ní kíkọ́, èmi yòó lo èyí.",
+        ],
+        "ha": [
+            f"Ina tabbatacce. Kana son faɗa abu {name_text}{amount_text}?",
+            f"Ina ji matukar. Kana son rubuta {name_text}{amount_text}?",
+            f"Don yarda. Ina ji abu {name_text}{amount_text}.",
+            f"Ina matsala wajen fahimta. Kana tana magana {name_text}{amount_text}?",
+            f"Dan da aiko ba daidai ba, rubuta abin ka ce kuma zan yi amfani da shi.",
+        ],
+        "ig": [
+            f"Aghọtaghị m ihe. Ọ na-ekwu maka {name_text}{amount_text}?",
+            f"Aghọtaghị m mma. Ọ na-achọ ide {name_text}{amount_text}?",
+            f"Biko kọwaa. M nụrụ ihe gbasara {name_text}{amount_text}.",
+            f"M nwe nsogbu ịghọta. Ọ na-ekwu maka {name_text}{amount_text}?",
+            f"Nr ma ọ bụrụ na transkripshọn bụ adịghị mma, dee ihe ọ kwuru n'ezie ka m jiri ya.",
+        ],
+    }
+    
+    # If we found meaningful content, use targeted clarification
+    if name_text or amount_text:
+        lang_clarifications = clarifications.get(language, clarifications["en"])
+        return random.choice(lang_clarifications)
+    
+    # Otherwise, fall back to general unclear message with menu
+    general_clarifications = {
+        "en": [
+            "I couldn't understand that voice note. Please try speaking more clearly, or type your message instead.",
+            "The transcription didn't make sense. Could you try again or type what you wanted to say?",
+            "I'm having trouble with voice recognition. Please type your message instead.",
+        ],
+        "pcm": [
+            "I no understand that voice note. Abeg try talk more clear, or type your message instead.",
+            "The transcription no make sense. You fit try again or type wetin you wan talk?",
+            "I dey find am hard with voice recognition. Abeg type your message instead.",
+        ],
+        "yo": [
+            "Mo kò gbọ́ ohùn náà. Jọ́wọ́ ṣe sọ̀rọ̀ rẹ̀ pọ́njú, tàbí kọ nǹkan tí o fẹ́ sọ̀ ní kíkọ́.",
+            "Àgbèrò náà kò ṣe pọ́. Ṣe o lè ṣe agbára gbígbé èyí tàbí kọ nǹkan tí o fẹ́ sọ̀?",
+            "Mo ń wà nínú ìṣòro pẹ̀lú ìgbọ́ ohùn. Jọ́wọ́ kọ nǹkan tí o fẹ́ sọ̀ ní kíkọ́.",
+        ],
+        "ha": [
+            "Ina fahimtar wannan murya bayi. Don yarda, kana magana daidai, ko rubuta sakon da na.",
+            "Aikin ba daidai ba. Kana sake kokari ko rubuta abin ka son faɗa.",
+            "Ina da matsala wajen fahimtar murya. Don rubuta sakon da na.",
+        ],
+        "ig": [
+            "Aghọtaghị m mụ that voice note ahụ. Biko nwaa ịkwu ka mma, ma ọ dee ozi gị n'oge.",
+            "Transkripshọn ahụ adịghị mma. Ị ga-agbalị ọzọ ma ọ dee ihe ị chọrọ ikwu?",
+            "M nwe nsogbu ịghọta olu. Biko dee ozi gị n'oge.",
+        ],
+    }
+    
+    lang_general = general_clarifications.get(language, general_clarifications["en"])
+    return random.choice(lang_general)
+
+
 def _empty_summary() -> dict[str, Any]:
     return {
         "total_sales": 0,
@@ -355,6 +533,28 @@ def process_voice_note(
     if transcript is None:
         try:
             transcript = transcribe(audio_path, language)
+            
+            # Log the transcript for debugging
+            logger.info(f"Transcribed audio in language '{language}': {transcript[:100]}...")
+            
+            # Check if transcription quality is poor (very short or appears to be gibberish)
+            if len(transcript) < 3:
+                logger.warning(f"Transcription seems too short: '{transcript}'")
+                fallback_reply = (
+                    f"I couldn't understand that voice note. "
+                    f"Please try speaking more clearly, or type your message instead. "
+                    f"You can say things like: \"I sold rice 5k\" or \"I spent 2k on transport\"."
+                )
+                return _response(
+                    transcript=transcript,
+                    user_id=user_id,
+                    db_path=db_path,
+                    reply=fallback_reply,
+                    entries=[],
+                    saved=False,
+                    language_notice_text=notice_text,
+                    detected_language=language,
+                )
         except RuntimeError as e:
             # AI model loading failed - provide fallback guidance
             error_msg = str(e)
@@ -391,6 +591,17 @@ def process_voice_note(
     if intent == HELP_INTENT:
         return _response(
             transcript, user_id, db_path, HELP_FAQ_REPLY, saved=False,
+            language_notice_text=notice_text,
+            detected_language=language,
+        )
+
+    # ------------------------------------------------------------------
+    # Greeting: natural conversation starter
+    # ------------------------------------------------------------------
+    if intent == GREETING_INTENT:
+        reply = _get_greeting_reply(language)
+        return _response(
+            transcript, user_id, db_path, reply, saved=False,
             language_notice_text=notice_text,
             detected_language=language,
         )
@@ -479,12 +690,19 @@ def process_voice_note(
             debts_added.append(debt)
         
         if not debts_added:
-            # All entries failed - return detailed failure message
-            if failed_entries:
+            # All entries failed - use clarification prompt if both amount and person missing
+            # but use detailed failure message if partial information was found
+            has_partial_info = any(
+                f['reason'] != _get_failure_message("missing_details", language)
+                for f in failed_entries
+            )
+            
+            if has_partial_info and failed_entries:
                 failure_details = "; ".join([f"\"{f['segment']}\" - {f['reason']}" for f in failed_entries])
                 reply = _get_failure_message("entry_not_recorded", language, reason=failure_details)
             else:
-                reply = DEBT_MISSING_DETAILS_REPLY
+                # No meaningful information extracted - use clarification prompt
+                reply = _generate_clarification(transcript, language)
             return _response(
                 transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text, detected_language=language
             )
@@ -672,7 +890,9 @@ def process_voice_note(
         parsed = parse_transcript(transcript)
     
     if not parsed:
-        return _response(transcript, user_id, db_path, UNCLEAR_REPLY, saved=False, language_notice_text=notice_text, detected_language=language)
+        # Use clarification prompt instead of generic unclear message
+        clarification = _generate_clarification(transcript, language)
+        return _response(transcript, user_id, db_path, clarification, saved=False, language_notice_text=notice_text, detected_language=language)
 
     saved_entries = add_entries(
         user_id=user_id,

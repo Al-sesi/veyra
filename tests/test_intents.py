@@ -56,7 +56,6 @@ from app.intents import INTENTS, classify_message, extract_amount, extract_perso
         ("menu", "menu"),
         ("MENU", "menu"),
         ("please show the menu", "menu"),
-        ("what can you do for me", "menu"),
         ("list commands", "menu"),
         # menu — Pidgin
         ("wetin you fit do", "menu"),
@@ -75,6 +74,25 @@ from app.intents import INTENTS, classify_message, extract_amount, extract_perso
         ("wetin be Veyra", "help"),
         ("who be Veyra", "help"),
         ("na pilot?", "help"),
+        # greeting — English
+        ("hello", "greeting"),
+        ("hi", "greeting"),
+        ("hey", "greeting"),
+        ("good morning", "greeting"),
+        ("good afternoon", "greeting"),
+        ("good evening", "greeting"),
+        ("how are you", "greeting"),
+        ("how's it going", "greeting"),
+        ("i need help", "greeting"),
+        # greeting — Pidgin
+        ("how far", "greeting"),
+        ("how you dey", "greeting"),
+        ("how body dey", "greeting"),
+        # greeting — other languages
+        ("bawo", "greeting"),
+        ("sannu", "greeting"),
+        ("kedu", "greeting"),
+        ("ndewo", "greeting"),
         # check_stock — English
         ("stock check", "check_stock"),
         ("what's remaining", "check_stock"),

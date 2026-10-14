@@ -371,7 +371,7 @@ def test_en_and_pcm_share_one_loaded_pipeline(monkeypatch):
 
     loaded_models = []
 
-    def _fake_pipeline(task, model, chunk_length_s=None):
+    def _fake_pipeline(task, model, chunk_length_s=None, device=None):
         loaded_models.append(model)
         return _FakeASRPipeline(return_text="na so")
 

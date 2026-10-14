@@ -3,6 +3,7 @@ Rule-based intent classification for trader voice notes.
 
 `classify_message(text)` maps a transcript to exactly ONE of:
 
+  - "greeting"        natural conversation starters (hello, hi, good morning, etc.)
   - "entry"           a new sale or expense to record
   - "correction"      fix the amount of the last entry
                       ("no, it was 4k not 40k", "sorry, make it 4k")
@@ -45,6 +46,7 @@ from app.languages.yo import YORUBA_PACK
 # Intent names
 # ---------------------------------------------------------------------------
 INTENTS: Tuple[str, ...] = (
+    "greeting",
     "entry",
     "correction",
     "delete_last",
@@ -59,6 +61,7 @@ INTENTS: Tuple[str, ...] = (
     "help",
 )
 
+GREETING_INTENT = "greeting"
 ENTRY_INTENT = "entry"
 CORRECTION_INTENT = "correction"
 DELETE_LAST_INTENT = "delete_last"
@@ -88,6 +91,29 @@ DEBT_INTENTS: Tuple[str, ...] = (
 #   IGBO_TRIGGERS    = ["ji m ugwo", ...]
 # The matcher (`find_trigger`) scans all lists in order, so appending is safe.
 # ---------------------------------------------------------------------------
+
+GREETING_TRIGGERS = [
+    # English - expanded with more natural conversational phrases
+    "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+    "good day", "greetings", "welcome", "how are you", "how far",
+    "what's up", "what's happening", "nice to meet you", "how are you doing",
+    "how's it going", "how do you do", "pleased to meet you", "good to see you",
+    "how have you been", "how's everything", "i need help",
+    # Nigerian Pidgin - expanded with more conversational variations
+    "how far", "how you dey", "na wa", "bawo", "bawoni",
+    "kedu", "sannu", "hey there", "hello there", "how body dey",
+    "how you", "wetin dey happen", "what dey happen",
+    "i greet you", "i dey greet", "how you dey go", "how you dey do",
+    # Yoruba - expanded
+    "bawo", "nibo", "e kaaro", "e kaasan", "e ku irole",
+    "bawo ni", "n lo", "e ku aale", "e ku iroole", "a n ku",
+    # Hausa - expanded
+    "sannu", "ina kwana", "barka da zuwa", "sannu da safe",
+    "barka da sake zuwa", "yaya kake", "kaji kawai", "ina",
+    # Igbo - expanded
+    "kedu", "ndewo", "ka odi", "ibu", "ka omume",
+    "kedu ka ị mere", "ndewo nu", "gini kwa", "ka i di",
+]
 
 DEBT_OWED_TO_ME_TRIGGERS = [
     # English
@@ -387,6 +413,7 @@ def classify_message(text: str) -> str:
     """Rule-based classifier; returns exactly one of `INTENTS`.
 
     Order matters:
+      - `greeting` first so natural conversation starters are handled naturally
       - `request_history` first so "show my history" is never mistaken for
         a debt/expense.
       - `expense_breakdown` before `check_stock` to handle spending queries first
@@ -404,6 +431,8 @@ def classify_message(text: str) -> str:
         the menu is shown as a fallback).
     """
     text = text or ""
+    if find_trigger(text, GREETING_TRIGGERS):
+        return GREETING_INTENT
     if find_trigger(text, REQUEST_HISTORY_TRIGGERS):
         return REQUEST_HISTORY_INTENT
     if find_trigger(text, EXPENSE_BREAKDOWN_TRIGGERS):

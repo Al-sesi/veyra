@@ -571,10 +571,41 @@ def transcribe(audio_path: str, language: str) -> str:
             logger.warning(f"N-ATLaS returned short/empty text for {lang_code}, trying OpenAI Whisper fallback")
             text = _transcribe_with_openai_whisper(audio_array, language)
 
+        # IMPROVEMENT: Re-detect language from transcribed text to verify accuracy
+        # If detected language differs from requested language, retry with detected language
+        if text and len(text) >= 5:
+            detected_lang = detect_language_from_text(text)
+            if detected_lang != lang_code and detected_lang != "en":
+                logger.info(f"Language mismatch detected: requested {lang_code}, transcribed text suggests {detected_lang}. Retrying with detected language.")
+                text = transcribe_with_language_retry(audio_array, detected_lang)
+
         return text
     except Exception as e:
         logger.warning(f"N-ATLaS transcription failed for {lang_code}: {e}, trying OpenAI Whisper fallback")
         # Fallback to OpenAI Whisper
+        return _transcribe_with_openai_whisper(audio_array, language)
+
+
+def transcribe_with_language_retry(audio_array, language: str) -> str:
+    """
+    Retry transcription with a different language when language mismatch is detected.
+    This improves accuracy when the user speaks in a different language than configured.
+    """
+    try:
+        lang_code = _resolve_language(language)
+        pipe = _load_pipeline(lang_code)
+        result = pipe(audio_array)
+        text = (result or {}).get("text", "") or ""
+        text = text.strip()
+        
+        if len(text) < 5:
+            # If still short, try OpenAI Whisper as fallback
+            logger.warning(f"Retry with {lang_code} also returned short text, trying OpenAI Whisper")
+            text = _transcribe_with_openai_whisper(audio_array, language)
+        
+        return text
+    except Exception as e:
+        logger.warning(f"Language retry failed for {language}: {e}, falling back to OpenAI Whisper")
         return _transcribe_with_openai_whisper(audio_array, language)
 
 

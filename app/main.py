@@ -114,11 +114,18 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
     except Exception as e:
         logger.warning(f"Could not check ffmpeg availability: {e}")
 
-    # Skip automatic model loading during startup to prevent 502 errors on free tier
-    # Models will load on-demand when users make requests
-    # Call /warmup endpoint manually if you want to preload models
-    # For Azure Web App with ML dependencies, model loading requires /warmup call
-    logger.info("Skipping automatic model loading to prevent startup timeout. Call /warmup to load N-ATLAS models.")
+    # Preload ALL ASR models on startup for instant voice note response
+    # This ensures models are ready before any user requests
+    try:
+        from app.asr import load_essential_models
+        logger.info("Preloading all ASR models for instant voice note response...")
+        model_status = load_essential_models(max_retries=3, retry_delay=2.0)
+        logger.info(f"Model preload complete: {model_status}")
+        if model_status["failed"]:
+            logger.warning(f"Some models failed to preload: {model_status['failed']}")
+    except Exception as e:
+        logger.error(f"Failed to preload models during startup: {e}")
+        logger.warning("Models will load on-demand when first voice note is processed")
 
 
 @app.get("/")

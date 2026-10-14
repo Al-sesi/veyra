@@ -127,6 +127,20 @@ def _ensure_db() -> None:  # pragma: no cover - trivial side effect
         logger.error(f"Failed to preload models during startup: {e}")
         logger.warning("Models will load on-demand when first voice note is processed")
 
+    # Warmup LLM connection to avoid cold start on first message
+    # This ensures both text and audio messages are fast from the start
+    try:
+        from app.llm_parser import warmup_llm
+        logger.info("Warming up LLM connection for instant text/audio processing...")
+        llm_warmup_status = warmup_llm()
+        logger.info(f"LLM warmup complete: {llm_warmup_status}")
+        if llm_warmup_status.get("status") == "failed":
+            logger.warning(f"LLM warmup failed: {llm_warmup_status.get('error')}")
+            logger.warning("LLM will initialize on first message (may be slower)")
+    except Exception as e:
+        logger.error(f"Failed to warmup LLM during startup: {e}")
+        logger.warning("LLM will initialize on first message (may be slower)")
+
 
 @app.get("/")
 @app.get("/health")
@@ -174,18 +188,23 @@ def deep_health():
 
 @app.get("/warmup")
 def warmup():
-    """Warmup endpoint to preload English model - call this after deployment to avoid cold starts."""
+    """Warmup endpoint to preload ASR models and LLM - call this after deployment to avoid cold starts."""
     try:
         from app.asr import load_essential_models, get_model_status
+        from app.llm_parser import warmup_llm
 
-        # Load English model with more retries for first-time loading (network issues)
+        # Load ASR models with more retries for first-time loading (network issues)
         load_status = load_essential_models(max_retries=5, retry_delay=5.0)
         model_status = get_model_status()
+
+        # Warmup LLM connection
+        llm_warmup_status = warmup_llm()
 
         return {
             "service": "Veyra",
             "status": "warmed_up",
-            "load_status": load_status,
+            "asr_load_status": load_status,
+            "llm_warmup_status": llm_warmup_status,
             **model_status,
         }
     except Exception as e:

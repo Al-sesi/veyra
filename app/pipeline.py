@@ -303,27 +303,22 @@ def _format_entry_success(entry: dict[str, Any], language: str) -> str:
 
 def _build_success_reply(entries: list[dict[str, Any]], language: str) -> str:
     """Build a simplified success response for recorded entries.
-    
+
     Args:
         entries: List of successfully saved entries
         language: Language code for the response
-    
+
     Returns:
-        Simplified response like "Recorded: Rice — ₦5,000; Chin Chin — ₦2,000 👍"
+        Simplified response like "RECORDED 👍\nRice — ₦5,000\nChin Chin — ₦2,000"
     """
-    templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
-    
     if not entries:
         return ""
-    
+
     # Format each entry
     entry_strings = [_format_entry_success(entry, language) for entry in entries]
-    
-    # Join with semicolons
-    entries_text = "; ".join(entry_strings)
-    
-    # Build final response
-    return f"{templates['recorded']}: {entries_text} 👍"
+
+    # Build final response with "RECORDED 👍" header and each entry on its own line
+    return f"RECORDED 👍\n" + "\n".join(entry_strings)
 
 
 def _get_greeting_reply(language: str) -> str:
@@ -622,8 +617,7 @@ def process_voice_note(
             return _response(
                 transcript, user_id, db_path, NO_ENTRY_TO_CORRECT_REPLY, saved=False, language_notice_text=notice_text, detected_language=language
             )
-        templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
-        reply = f"Corrected: {format_naira(updated['amount'])} naira 👍"
+        reply = f"RECORDED 👍\nCorrected to ₦{format_naira(updated['amount'])}"
         return _response(
             transcript, updated["user_id"], db_path, reply, [updated], saved=True, language_notice_text=notice_text, detected_language=language
         )
@@ -636,12 +630,11 @@ def process_voice_note(
             return _response(
                 transcript, user_id, db_path, NO_ENTRY_TO_REMOVE_REPLY, saved=False, language_notice_text=notice_text
             )
-        templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
         return _response(
             transcript,
             removed["user_id"],
             db_path,
-            "Removed 👍",
+            "RECORDED 👍\nRemoved last entry",
             [removed],
             saved=True,
             language_notice_text=notice_text,
@@ -720,8 +713,7 @@ def process_voice_note(
                 details=failure_details
             )
         else:
-            # All debts succeeded - use normal success reply
-            templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
+            # All debts succeeded - use simplified RECORDED format
             debt_entries = []
             for debt in debts_added:
                 person = debt['person']
@@ -731,11 +723,8 @@ def process_voice_note(
                 else:
                     debt_str = f"{person} — ₦{amount}"
                 debt_entries.append(debt_str)
-            
-            if len(debt_entries) == 1:
-                reply = f"{templates['recorded']}: {debt_entries[0]} 👍"
-            else:
-                reply = f"{templates['recorded']}: {'; '.join(debt_entries)} 👍"
+
+            reply = f"RECORDED 👍\n" + "\n".join(debt_entries)
         
         return _response(transcript, debts_added[0]["user_id"], db_path, reply, debts_added, saved=True, language_notice_text=notice_text, detected_language=language)
 
@@ -751,8 +740,7 @@ def process_voice_note(
         if settled is None:
             reply = f"I couldn't find an open debt for {person}."
             return _response(transcript, user_id, db_path, reply, saved=False, language_notice_text=notice_text, detected_language=language)
-        templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
-        reply = f"Paid: {person} — ₦{format_naira(settled['amount'])} 👍"
+        reply = f"RECORDED 👍\nPaid: {person} — ₦{format_naira(settled['amount'])}"
         return _response(
             transcript, settled["user_id"], db_path, reply, saved=True, language_notice_text=notice_text, detected_language=language
         )

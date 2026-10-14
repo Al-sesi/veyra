@@ -288,7 +288,7 @@ async function sendAudioMessage(blob, filename) {
     form.append("file", blob, filename);
     form.append("language", lang);
     const uid = localStorage.getItem(UID_KEY);
-    if (uid) form.append("user_id", uid);
+    if (uid && uid !== "null" && !isNaN(parseInt(uid))) form.append("user_id", uid);
 
     const res = await fetch(`${API_BASE}/voice-note`, { method: "POST", body: form });
     const data = await res.json().catch(() => ({}));
@@ -345,7 +345,7 @@ async function sendPending() {
     form.append("transcript", text);
     // For text, don't send language - let backend auto-detect
     const uid = localStorage.getItem(UID_KEY);
-    if (uid) form.append("user_id", uid);
+    if (uid && uid !== "null" && !isNaN(parseInt(uid))) form.append("user_id", uid);
 
     const res = await fetch(`${API_BASE}/voice-note`, { method: "POST", body: form });
     const data = await res.json().catch(() => ({}));
@@ -447,7 +447,7 @@ function renderEntries(entries) {
 
 async function refreshBook() {
   const uid = localStorage.getItem(UID_KEY);
-  if (!uid) {
+  if (!uid || uid === "null" || isNaN(parseInt(uid))) {
     bookOwner.textContent = "";
     bookEmpty.hidden = false;
     bookContent.hidden = true;

@@ -960,6 +960,62 @@ def generate_xlsx_ledger_bytes(
     return buf.getvalue()
 
 
+def generate_csv_ledger_bytes(
+    user_id: int,
+    *,
+    db_path=None,
+) -> bytes:
+    """Build a fresh in-memory .csv file for ``user_id``.
+
+    Columns (one row per active entry, chronological order with a running
+    balance where sales add and expenses subtract):
+      - Date        (created_at, formatted)
+      - Item        (the item name, e.g. "Rice")
+      - Amount      (integer naira, sale is positive, expense is negative)
+      - Type        (Sale / Expense)
+      - Balance     (running balance after this row)
+
+    The CSV is NEVER cached on disk: callers stream it out fresh on
+    every request so the file is always up to date.
+    """
+    import csv
+    from io import StringIO
+
+    entries = list_active_entries_chronological(user_id, db_path=db_path)
+
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Header row
+    writer.writerow(["Date", "Item", "Amount (₦)", "Type", "Balance (₦)"])
+
+    # Data rows
+    running = 0
+    for entry in entries:
+        amount_int = int(entry["amount"])
+        signed = amount_int if entry["type"] == "sale" else -amount_int
+        running += signed
+        raw_date = entry.get("created_at") or ""
+        writer.writerow([
+            raw_date,
+            entry.get("item", ""),
+            signed,
+            "Sale" if entry["type"] == "sale" else "Expense",
+            running,
+        ])
+
+    # Summary footer
+    writer.writerow([])
+    writer.writerow(["Summary"])
+    sales_total = sum(int(e["amount"]) for e in entries if e["type"] == "sale")
+    expense_total = sum(int(e["amount"]) for e in entries if e["type"] == "expense")
+    writer.writerow(["Total Sales", sales_total])
+    writer.writerow(["Total Expenses", expense_total])
+    writer.writerow(["Net Profit / (Loss)", sales_total - expense_total])
+
+    return output.getvalue().encode('utf-8')
+
+
 def build_ledger_path(phone_or_name: str) -> str:
     """Return the URL path ``/ledger/{phone}.xlsx`` (URL-encoded safe)."""
     cleaned = (phone_or_name or "").strip()

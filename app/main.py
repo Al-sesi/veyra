@@ -39,7 +39,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from app.db import DEFAULT_DB_PATH, USE_POSTGRES, DATABASE_URL, get_or_create_user, init_db, lookup_user_by_phone
-from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, get_summary, list_entries, list_open_debts
+from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, generate_csv_ledger_bytes, get_summary, list_entries, list_open_debts
 
 logger = logging.getLogger("veyra.webhook")
 
@@ -320,7 +320,7 @@ async def voice_note(
         raise HTTPException(status_code=400, detail="Either file or transcript is required")
 
     # For audio, use provided language or default to English
-    # The ASR will transcribe in that language, and we can re-detect after if needed
+    # Note: Frontend has a language selector - users should select their language
     lang = language if language else "en"
 
     # Stream the upload into a temp file so `process_voice_note` (which expects
@@ -462,6 +462,49 @@ def ledger(user_id: int, limit: int = 50):
     if limit <= 0 or limit > 500:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
     return {"user_id": user_id, "entries": list_entries(user_id=user_id, limit=limit)}
+
+
+@app.get("/ledger/{user_id}/export.xlsx")
+def ledger_xlsx_by_user_id(user_id: int):
+    """Export ledger as Excel file by user_id (for demo and direct access)."""
+    payload = generate_xlsx_ledger_bytes(
+        int(user_id),
+        db_path=DEFAULT_DB_PATH,
+        phone_label=f"user_{user_id}",
+    )
+    filename = f"veyra_ledger_{user_id}.xlsx"
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@app.get("/ledger/{user_id}/export.csv")
+def ledger_csv_by_user_id(user_id: int):
+    """Export ledger as CSV file by user_id (for Google Sheets import)."""
+    payload = generate_csv_ledger_bytes(
+        int(user_id),
+        db_path=DEFAULT_DB_PATH,
+    )
+    filename = f"veyra_ledger_{user_id}.csv"
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"",
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    return StreamingResponse(
+        BytesIO(payload),
+        media_type="text/csv",
+        headers=headers,
+    )
 
 
 @app.get("/summary/{user_id}")

@@ -41,6 +41,13 @@
             <h1>Talk to Veyra</h1>
           </div>
           <div class="chat-head-actions">
+            <select id="languageSelect" class="language-select" aria-label="Select language for voice recordings">
+              <option value="en">English</option>
+              <option value="yo">Yorùbá</option>
+              <option value="ha">Hausa</option>
+              <option value="ig">Igbo</option>
+              <option value="pcm">Pidgin</option>
+            </select>
             <button id="resetBookBtn" class="btn btn-ghost btn-small" type="button" title="Start a fresh book in this browser">New book</button>
             <button id="bookToggleBtn" class="book-toggle-btn" type="button" aria-label="Toggle book panel" title="View your book">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
@@ -51,9 +58,9 @@
         <div id="chatLog" class="chat-log" aria-live="polite">
           <div class="bubble bubble-veyra">
             <p class="bubble-name">Veyra</p>
-            <p>Sàlàm! Record a voice note. Say things like
-            “I sold 5 bags of rice for ₦30,000” or “Bala owes me ₦2,000” —
-            in Yorùbá, Hausa, Igbo or English.</p>
+            <p>Hello! I'm Veyra, your WhatsApp bookkeeping assistant. 📝</p>
+            <p>Record a voice note or type a message to log your sales, expenses, and debts. Say things like "I sold 5 bags of rice for ₦30,000" or "Bala owes me ₦2,000" — in Yorùbá, Hausa, Igbo, Pidgin or English.</p>
+            <p><strong>Note:</strong> Text messages auto-detect language. For voice recordings, select your language above.</p>
           </div>
         </div>
 
@@ -74,11 +81,7 @@
             </div>
           </div>
 
-          <div id="pendingBar" class="pending-bar" hidden>
-            <span id="pendingName"></span>
-            <audio id="pendingPlayer" controls hidden></audio>
-            <button id="discardBtn" class="btn btn-ghost btn-small" type="button">Discard</button>
-          </div>
+
         </div>
       </div>
     </section>
@@ -90,6 +93,16 @@
         <div class="book-head">
           <h2>Your book</h2>
           <p id="bookOwner" class="book-owner"></p>
+          <div class="book-actions">
+            <button id="downloadExcelBtn" class="btn btn-small" type="button" title="Download as Excel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+              Excel
+            </button>
+            <button id="downloadCsvBtn" class="btn btn-small" type="button" title="Download as CSV for Google Sheets">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+              CSV
+            </button>
+          </div>
           <button id="bookCloseBtn" class="book-close-btn" type="button" aria-label="Close book panel" title="Close">×</button>
         </div>
 

@@ -31,12 +31,8 @@ const LANG_NAMES = { yo: "Yorùbá", ha: "Hausa", ig: "Igbo", en: "English", pcm
 const chatLog = document.getElementById("chatLog");
 const micBtn = document.getElementById("micBtn");
 const fileInput = document.getElementById("fileInput");
-const pendingBar = document.getElementById("pendingBar");
-const pendingName = document.getElementById("pendingName");
-const pendingPlayer = document.getElementById("pendingPlayer");
 const textInput = document.getElementById("textInput");
 const sendBtn = document.getElementById("sendBtn");
-const discardBtn = document.getElementById("discardBtn");
 const resetBookBtn = document.getElementById("resetBookBtn");
 const bookOwner = document.getElementById("bookOwner");
 const bookEmpty = document.getElementById("bookEmpty");
@@ -46,12 +42,12 @@ const bookDebts = document.getElementById("bookDebts");
 const bookEntries = document.getElementById("bookEntries");
 const bookCard = document.querySelector(".book-card");
 const bookOverlay = document.getElementById("bookOverlay");
+const downloadExcelBtn = document.getElementById("downloadExcelBtn");
+const downloadCsvBtn = document.getElementById("downloadCsvBtn");
+const languageSelect = document.getElementById("languageSelect");
 
-let currentLang = "en"; // Default to English since language selection is removed
-let pendingBlob = null;
-let pendingFilename = "";
+let currentLang = "en"; // Default to English
 let recorder = null; // {stream, ctx, source, processor, chunks}
-let objectUrl = null;
 
 // ---------------------------------------------------------------------------
 // Chat rendering
@@ -137,35 +133,6 @@ function showTyping() {
 
 function hideTyping() {
   document.getElementById("typingBubble")?.remove();
-}
-
-// ---------------------------------------------------------------------------
-// Pending audio (recorded / sampled / uploaded)
-// ---------------------------------------------------------------------------
-
-function setPending(blob, filename) {
-  clearPending();
-  pendingBlob = blob;
-  pendingFilename = filename;
-  pendingName.textContent = filename;
-  objectUrl = URL.createObjectURL(blob);
-  pendingPlayer.src = objectUrl;
-  pendingPlayer.hidden = false;
-  pendingBar.hidden = false;
-  textInput.value = "";
-}
-
-function clearPending() {
-  pendingBlob = null;
-  pendingFilename = "";
-  pendingBar.hidden = true;
-  pendingPlayer.hidden = true;
-  pendingPlayer.removeAttribute("src");
-  textInput.value = "";
-  if (objectUrl) {
-    URL.revokeObjectURL(objectUrl);
-    objectUrl = null;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +224,9 @@ micBtn.addEventListener("click", async () => {
       const blob = await stopRecording();
       if (blob) {
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-        setPending(blob, `voice-note-${stamp}.wav`);
+        const filename = `voice-note-${stamp}.wav`;
+        // Send immediately like WhatsApp
+        await sendAudioMessage(blob, filename);
       }
     } finally {
       micBtn.disabled = false;
@@ -279,7 +248,8 @@ micBtn.addEventListener("click", async () => {
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];
   if (!file) return;
-  setPending(file, file.name);
+  // Send immediately like WhatsApp
+  sendAudioMessage(file, file.name);
   fileInput.value = "";
 });
 
@@ -302,36 +272,12 @@ sendBtn.addEventListener("click", () => {
 // Send to the pipeline
 // ---------------------------------------------------------------------------
 
-async function sendPending() {
-  const text = textInput.value.trim();
-  const isText = text.length > 0;
-  const isAudio = pendingBlob !== null;
-  
-  if (!isText && !isAudio) return;
-  
-  // Capture values
-  const blob = pendingBlob;
-  const filename = pendingFilename;
+async function sendAudioMessage(blob, filename) {
   const lang = currentLang;
-  
-  // Clear state
-  textInput.value = "";
-  pendingBlob = null;
-  pendingFilename = "";
-  pendingBar.hidden = true;
-  if (objectUrl) {
-    URL.revokeObjectURL(objectUrl);
-    objectUrl = null;
-  }
 
   addBubble("user", (b) => {
-    if (isText) {
-      addText(b, text);
-      addMeta(b, `Text (${LANG_NAMES[lang]})`);
-    } else {
-      addText(b, "Recording");
-      addMeta(b, "Sending…");
-    }
+    addText(b, "Voice recording");
+    addMeta(b, "Sending…");
   });
 
   showTyping();
@@ -339,11 +285,7 @@ async function sendPending() {
 
   try {
     const form = new FormData();
-    if (isText) {
-      form.append("transcript", text);
-    } else {
-      form.append("file", blob, filename);
-    }
+    form.append("file", blob, filename);
     form.append("language", lang);
     const uid = localStorage.getItem(UID_KEY);
     if (uid) form.append("user_id", uid);
@@ -357,9 +299,10 @@ async function sendPending() {
     localStorage.setItem(UID_KEY, String(data.user_id));
 
     hideTyping();
+    const detectedLang = data.detected_language || lang;
     addBubble("user", (b) => {
-      addText(b, data.transcript || text || "(no transcript)");
-      addMeta(b, LANG_NAMES[lang]);
+      addText(b, data.transcript || "(no transcript)");
+      addMeta(b, LANG_NAMES[detectedLang] || detectedLang);
     });
     addBubble("veyra", (b) => {
       addText(b, data.reply_text || "Done.");
@@ -382,7 +325,62 @@ async function sendPending() {
   }
 }
 
-discardBtn.addEventListener("click", clearPending);
+async function sendPending() {
+  const text = textInput.value.trim();
+  if (!text) return;
+
+  textInput.value = "";
+  const lang = currentLang;
+
+  addBubble("user", (b) => {
+    addText(b, text);
+    addMeta(b, "Text");
+  });
+
+  showTyping();
+  sendBtn.disabled = true;
+
+  try {
+    const form = new FormData();
+    form.append("transcript", text);
+    // For text, don't send language - let backend auto-detect
+    const uid = localStorage.getItem(UID_KEY);
+    if (uid) form.append("user_id", uid);
+
+    const res = await fetch(`${API_BASE}/voice-note`, { method: "POST", body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.detail || `HTTP ${res.status}`);
+    }
+
+    localStorage.setItem(UID_KEY, String(data.user_id));
+
+    hideTyping();
+    const detectedLang = data.detected_language || "en";
+    addBubble("user", (b) => {
+      addText(b, data.transcript || text || "(no transcript)");
+      addMeta(b, LANG_NAMES[detectedLang] || detectedLang);
+    });
+    addBubble("veyra", (b) => {
+      addText(b, data.reply_text || "Done.");
+      addEntryChips(b, data.entries);
+      if (data.language_notice) addMeta(b, data.language_notice);
+    });
+
+    await refreshBook();
+  } catch (err) {
+    hideTyping();
+    console.error("API Error:", err);
+    console.error("API_BASE:", API_BASE);
+    addErrorBubble(
+      err.message.includes("Failed to fetch")
+        ? `Cannot reach Veyra at ${API_BASE}. Please check your internet connection.`
+        : `Something went wrong: ${err.message}`
+    );
+  } finally {
+    sendBtn.disabled = false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Your book
@@ -478,9 +476,71 @@ async function refreshBook() {
 
 resetBookBtn.addEventListener("click", () => {
   localStorage.removeItem(UID_KEY);
-  clearPending();
+  textInput.value = "";
   refreshBook();
   addBubble("veyra", (b) => addText(b, "Fresh book started. Your next voice note opens a new one."));
+});
+
+// Language selector change handler
+languageSelect.addEventListener("change", (e) => {
+  currentLang = e.target.value;
+  addBubble("veyra", (b) => {
+    addText(b, `Language changed to ${LANG_NAMES[currentLang]}. I'll use this for your next message.`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Download Excel/CSV
+// ---------------------------------------------------------------------------
+
+downloadExcelBtn.addEventListener("click", async () => {
+  const uid = localStorage.getItem(UID_KEY);
+  if (!uid) {
+    addErrorBubble("No book to download. Record some entries first.");
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/ledger/${uid}/export.xlsx`);
+    if (!res.ok) throw new Error("Download failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `veyra_ledger_${uid}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addBubble("veyra", (b) => addText(b, "Excel file downloaded!"));
+  } catch (err) {
+    console.error("Download error:", err);
+    addErrorBubble("Failed to download Excel file. Please try again.");
+  }
+});
+
+downloadCsvBtn.addEventListener("click", async () => {
+  const uid = localStorage.getItem(UID_KEY);
+  if (!uid) {
+    addErrorBubble("No book to download. Record some entries first.");
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/ledger/${uid}/export.csv`);
+    if (!res.ok) throw new Error("Download failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `veyra_ledger_${uid}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addBubble("veyra", (b) => addText(b, "CSV file downloaded! You can import this into Google Sheets."));
+  } catch (err) {
+    console.error("Download error:", err);
+    addErrorBubble("Failed to download CSV file. Please try again.");
+  }
 });
 
 // Mobile book panel toggle

@@ -708,26 +708,34 @@ def process_voice_note(
             )
         
         # Build reply with successful debts using simplified format
-        templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
-        debt_entries = []
-        for debt in debts_added:
-            person = debt['person']
-            amount = format_naira(debt['amount'])
-            if direction == "owed_to_me":
-                debt_str = f"{person} — ₦{amount}"
-            else:
-                debt_str = f"{person} — ₦{amount}"
-            debt_entries.append(debt_str)
-        
-        if len(debt_entries) == 1:
-            reply = f"{templates['recorded']}: {debt_entries[0]} 👍"
+        # Handle partial success: if there are both successful and failed entries,
+        # use the partial_success template instead of appending to the success message
+        if failed_entries and debts_added:
+            # Partial success case: some debts recorded, some failed
+            failure_templates = FAILURE_TEMPLATES.get(language, FAILURE_TEMPLATES["en"])
+            failure_details = "; ".join([f['reason'] for f in failed_entries])
+            reply = failure_templates["partial_success"].format(
+                count=len(debts_added),
+                failed_count=len(failed_entries),
+                details=failure_details
+            )
         else:
-            reply = f"{templates['recorded']}: {'; '.join(debt_entries)} 👍"
-        
-        # Append failure notifications if there were partial failures
-        if failed_entries:
-            failure_messages = [f['reason'] for f in failed_entries]
-            reply += " " + " ".join(failure_messages)
+            # All debts succeeded - use normal success reply
+            templates = SUCCESS_TEMPLATES.get(language, SUCCESS_TEMPLATES["en"])
+            debt_entries = []
+            for debt in debts_added:
+                person = debt['person']
+                amount = format_naira(debt['amount'])
+                if direction == "owed_to_me":
+                    debt_str = f"{person} — ₦{amount}"
+                else:
+                    debt_str = f"{person} — ₦{amount}"
+                debt_entries.append(debt_str)
+            
+            if len(debt_entries) == 1:
+                reply = f"{templates['recorded']}: {debt_entries[0]} 👍"
+            else:
+                reply = f"{templates['recorded']}: {'; '.join(debt_entries)} 👍"
         
         return _response(transcript, debts_added[0]["user_id"], db_path, reply, debts_added, saved=True, language_notice_text=notice_text, detected_language=language)
 
@@ -904,12 +912,23 @@ def process_voice_note(
     )
     
     # Check for low stock on sale entries and append warning if needed
-    reply = _entries_reply(saved_entries, language)
-    
-    # Append failure notifications if there were any LLM failures
-    if failed_entries:
-        failure_messages = [f['reason'] for f in failed_entries]
-        reply += " " + " ".join(failure_messages)
+    # Handle partial success: if there are both successful and failed entries,
+    # use the partial_success template instead of appending to the success message
+    if failed_entries and saved_entries:
+        # Partial success case: some entries recorded, some failed
+        templates = FAILURE_TEMPLATES.get(language, FAILURE_TEMPLATES["en"])
+        failure_details = "; ".join([f['reason'] for f in failed_entries])
+        reply = templates["partial_success"].format(
+            count=len(saved_entries),
+            failed_count=len(failed_entries),
+            details=failure_details
+        )
+    elif failed_entries:
+        # All entries failed - use clarification prompt
+        reply = _generate_clarification(transcript, language)
+    else:
+        # All entries succeeded - use normal success reply
+        reply = _entries_reply(saved_entries, language)
     
     for entry in saved_entries:
         if entry["type"] == "sale" and user_id is not None:

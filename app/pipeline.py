@@ -878,11 +878,15 @@ def process_voice_note(
         else:
             logger.info("LLM returned low confidence or no valid entries, trying rule-based parser")
             # Fall back to rule-based parser
+            # Clear failed_entries since we're using rule-based parser results
+            failed_entries = []
             parsed = parse_transcript(transcript)
             
     except Exception as e:
         logger.warning(f"LLM extraction failed: {e}, falling back to rule-based parser")
         # Fall back to rule-based parser on any error
+        # Clear failed_entries since we're using rule-based parser results
+        failed_entries = []
         parsed = parse_transcript(transcript)
     
     if not parsed:

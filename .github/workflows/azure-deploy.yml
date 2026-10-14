@@ -65,7 +65,7 @@ jobs:
             --set-env-vars AZURE_OPENAI_ENDPOINT=${{ env.AZURE_OPENAI_ENDPOINT }} \
             --set-env-vars AZURE_OPENAI_DEPLOYMENT=${{ env.AZURE_OPENAI_DEPLOYMENT }} \
             --set-env-vars AZURE_OPENAI_API_VERSION=${{ env.AZURE_OPENAI_API_VERSION }} \
-            --set-secrets AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}
+            --set-env-vars AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}
 
       - name: Health check
         if: env.AZURE_CLIENT_ID != ''

@@ -803,7 +803,31 @@ def split_transactions(text: str) -> List[str]:
             continue
         
         # Normalize connector words within this sentence
-        normalized = re.sub(r"\s+(and|then)\s+", " , ", part, flags=re.IGNORECASE)
+        # Use " , " as a separator for "and" to split transactions
+        # But be careful: only split if both sides have transaction indicators
+        normalized = part
+        # Split on "and" or "then" if they appear to separate complete transactions
+        # Pattern: check if "and/then" is followed by a transaction verb or amount
+        and_splits = re.split(r"\s+(and|then)\s+", part, flags=re.IGNORECASE)
+        if len(and_splits) > 1:
+            # Check if each segment has transaction indicators
+            valid_segments = []
+            for seg in and_splits:
+                seg_lower = seg.lower()
+                # Check if segment has transaction verb or amount
+                has_tx = any(v in seg_lower for v in ["buy", "bought", "purchase", "sold", "sell", "pay", "paid", "spent", "spend", "got", "acquired"])
+                has_amount = bool(re.search(r"\d+k", seg_lower) or re.search(r"\d+[,\.]?\d*", seg_lower) or
+                                 any(c in seg_lower for c in ["k", "naira", "n", "#", "₦"]))
+                if has_tx or has_amount:
+                    valid_segments.append(seg.strip())
+            if len(valid_segments) > 1:
+                # Multiple valid segments found, use the split
+                normalized = " , ".join(valid_segments)
+            else:
+                # Not a valid split, keep original
+                normalized = part
+        else:
+            normalized = part
         
         # Handle Hausa "kuma" (and) as a transaction separator
         kuma_parts = re.split(r"\s+kuma\s+", normalized)
@@ -830,6 +854,8 @@ def split_transactions(text: str) -> List[str]:
             
             # Also check for natural language patterns where comma separates item from amount
             # e.g., "I bought chin chin, 2k" - keep together
+            # BUT only if it's a SINGLE transaction with verb + item + amount
+            # If there are multiple verbs (indicating multiple transactions), split them
             has_natural_pattern = False
             if "," in kuma_part:
                 # Check if pattern is like "[verb] [item], [amount]"
@@ -841,7 +867,13 @@ def split_transactions(text: str) -> List[str]:
                     has_verb = any(v in first_seg for v in ["buy", "bought", "purchase", "purchased", "got", "sent", "acquired", "ordered"])
                     # Check if second part has an amount
                     has_amount = any(c in second_seg for c in ["k", "naira", "n", "#", "₦"]) or re.search(r"\d", second_seg)
-                    if has_verb and has_amount:
+                    # IMPORTANT: Check if there are MULTIPLE transaction verbs in the whole segment
+                    # If so, this is likely multiple transactions and should be split
+                    all_verbs = ["buy", "bought", "purchase", "purchased", "got", "sent", "acquired", "ordered",
+                                "sell", "sold", "clear", "move", "offload", "pay", "paid", "spent", "spend"]
+                    verb_count = sum(1 for v in all_verbs if v in kuma_part.lower())
+                    # Only keep together if it's a single verb (single transaction)
+                    if has_verb and has_amount and verb_count == 1:
                         has_natural_pattern = True
             
             if has_hausa_pattern or has_natural_pattern:

@@ -26,6 +26,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Optional
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from io import BytesIO
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile

@@ -15,6 +15,9 @@ env:
   IMAGE_NAME: veyra-backend
   RESOURCE_GROUP: rg-veyra
   CONTAINER_APP: ca-veyra-backend
+  AZURE_OPENAI_ENDPOINT: https://veyra-openai-001.openai.azure.com/
+  AZURE_OPENAI_DEPLOYMENT: gpt-4.1-mini
+  AZURE_OPENAI_API_VERSION: 2024-08-01-preview
 
 jobs:
   build:
@@ -58,7 +61,11 @@ jobs:
           az containerapp update \
             --name ${{ env.CONTAINER_APP }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            --set-env-vars AZURE_OPENAI_ENDPOINT=${{ env.AZURE_OPENAI_ENDPOINT }} \
+            --set-env-vars AZURE_OPENAI_DEPLOYMENT=${{ env.AZURE_OPENAI_DEPLOYMENT }} \
+            --set-env-vars AZURE_OPENAI_API_VERSION=${{ env.AZURE_OPENAI_API_VERSION }} \
+            --set-secrets AZURE_OPENAI_API_KEY=${{ secrets.AZURE_OPENAI_API_KEY }}
 
       - name: Health check
         if: env.AZURE_CLIENT_ID != ''

@@ -25,6 +25,11 @@ import os
 from typing import List, Dict, Any, Optional
 import json
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 logger = logging.getLogger("veyra.llm_parser")
 
 # Language names for the LLM instruction

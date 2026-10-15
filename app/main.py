@@ -38,7 +38,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
-from app.db import DEFAULT_DB_PATH, USE_POSTGRES, DATABASE_URL, get_or_create_user, init_db, lookup_user_by_phone
+from app.db import DEFAULT_DB_PATH, USE_POSTGRES, DATABASE_URL, get_or_create_user, init_db, lookup_user_by_phone, add_vocabulary, get_vocabulary_by_language, get_vocabulary_meaning
 from app.ledger import build_ledger_path, generate_xlsx_ledger_bytes, generate_csv_ledger_bytes, get_summary, list_entries, list_open_debts
 
 logger = logging.getLogger("veyra.webhook")
@@ -163,6 +163,8 @@ def root():
             "GET  /debts/{user_id}",
             "GET  /webhook",
             "POST /webhook",
+            "POST /vocabulary (teach Veyra new words)",
+            "GET  /vocabulary/{language} (get learned vocabulary)",
         ],
     }
 
@@ -519,6 +521,35 @@ def summary(user_id: int, days: int = 7):
 def debts(user_id: int):
     """Open (unpaid) debts for a user, newest first."""
     return {"user_id": user_id, "debts": list_open_debts(user_id=user_id)}
+
+
+# ---------------------------------------------------------------------------
+# Vocabulary learning endpoints
+# ---------------------------------------------------------------------------
+
+@app.post("/vocabulary")
+def add_vocabulary_endpoint(
+    word: str = Form(...),
+    meaning: str = Form(...),
+    language: str = Form(...),
+    category: str = Form(...),
+):
+    """Add or update a vocabulary entry for learning."""
+    try:
+        add_vocabulary(word, meaning, language, category, db_path=DEFAULT_DB_PATH)
+        return {"status": "success", "message": f"Learned '{word}' in {language}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/vocabulary/{language}")
+def get_vocabulary_endpoint(language: str):
+    """Get all vocabulary entries for a specific language."""
+    try:
+        vocab = get_vocabulary_by_language(language, db_path=DEFAULT_DB_PATH)
+        return {"language": language, "vocabulary": vocab}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

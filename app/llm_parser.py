@@ -255,13 +255,23 @@ def _get_llm_client_and_model():
     )
 
 
-def _build_user_prompt(transcript: str, language_name: str) -> str:
-    return (
+def _build_user_prompt(transcript: str, language_name: str, vocabulary: list[dict[str, Any]] = None) -> str:
+    prompt = (
         f'Transcript: "{transcript}"\n'
         f"Language: {language_name}\n\n"
-        "Extract the bookkeeping entries according to the system instructions.\n"
-        "Return ONLY a JSON array of entries."
     )
+    
+    # Add learned vocabulary if available
+    if vocabulary and vocabulary:
+        prompt += "Learned vocabulary for this language:\n"
+        for vocab in vocabulary:
+            prompt += f"- {vocab['word']} = {vocab['meaning']} (category: {vocab['category']})\n"
+        prompt += "\n"
+    
+    prompt += "Extract the bookkeeping entries according to the system instructions.\n"
+    prompt += "Return ONLY a JSON array of entries."
+    
+    return prompt
 
 
 def warmup_llm() -> dict:
@@ -298,7 +308,7 @@ def warmup_llm() -> dict:
         }
 
 
-def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, Any]], str]:
+def extract_entries_llm(transcript: str, language: str, vocabulary: list[dict[str, Any]] = None) -> tuple[List[Dict[str, Any]], str]:
     """
     Extract bookkeeping entries from a transcript using Azure OpenAI / OpenAI.
 
@@ -312,6 +322,8 @@ def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, 
         The text transcript from ASR (speech-to-text)
     language : str
         Language code: "en", "ha", "ig", "yo", or "pcm"
+    vocabulary : list[dict] | None
+        Optional learned vocabulary for this language
 
     Returns
     -------
@@ -346,7 +358,7 @@ def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, 
     try:
         client, model = _get_llm_client_and_model()
 
-        user_prompt = _build_user_prompt(transcript, language_name)
+        user_prompt = _build_user_prompt(transcript, language_name, vocabulary)
 
         logger.info(f"Calling LLM (Azure/OpenAI) for transcript in {language_name}")
 
@@ -435,7 +447,7 @@ def extract_entries_llm(transcript: str, language: str) -> tuple[List[Dict[str, 
         raise RuntimeError(f"LLM extraction failed: {e}") from e
 
 
-def extract_entries_llm_safe(transcript: str, language: str) -> tuple[List[Dict[str, Any]], str]:
+def extract_entries_llm_safe(transcript: str, language: str, vocabulary: list[dict[str, Any]] = None) -> tuple[List[Dict[str, Any]], str]:
     """
     Safe wrapper for extract_entries_llm that handles all errors gracefully.
 
@@ -449,6 +461,8 @@ def extract_entries_llm_safe(transcript: str, language: str) -> tuple[List[Dict[
         The text transcript from ASR
     language : str
         Language code
+    vocabulary : list[dict] | None
+        Optional learned vocabulary for this language
 
     Returns
     -------
@@ -458,7 +472,7 @@ def extract_entries_llm_safe(transcript: str, language: str) -> tuple[List[Dict[
         and raw_output contains the error message.
     """
     try:
-        return extract_entries_llm(transcript, language)
+        return extract_entries_llm(transcript, language, vocabulary)
     except Exception as e:
         logger.warning(f"LLM extraction failed, returning unclear entry: {e}")
         return [{

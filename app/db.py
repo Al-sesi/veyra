@@ -21,6 +21,9 @@ Tables:
                          rule_based_parser_tried_first, rule_based_parser_failed,
                          timestamp
                          Logs LLM extraction attempts for analysis and documentation.
+  - vocabulary : id (PK), word (TEXT), meaning (TEXT), language (TEXT),
+                 category (TEXT), usage_count (INTEGER), created_at
+                 Stores learned vocabulary for better parsing.
 """
 
 from __future__ import annotations
@@ -220,6 +223,20 @@ CREATE INDEX IF NOT EXISTS idx_debt_transactions_debtor
 
 CREATE INDEX IF NOT EXISTS idx_llm_logs_user_timestamp
     ON llm_extraction_logs(user_id, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS vocabulary (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    word        TEXT    NOT NULL,
+    meaning     TEXT    NOT NULL,
+    language    TEXT    NOT NULL,
+    category    TEXT    NOT NULL,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(word, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vocabulary_language
+    ON vocabulary(language);
 """
 
 # PostgreSQL schema (uses Postgres-specific syntax)
@@ -308,6 +325,20 @@ CREATE INDEX IF NOT EXISTS idx_debt_transactions_debtor
 
 CREATE INDEX IF NOT EXISTS idx_llm_logs_user_timestamp
     ON llm_extraction_logs(user_id, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS vocabulary (
+    id          SERIAL PRIMARY KEY,
+    word        TEXT    NOT NULL,
+    meaning     TEXT    NOT NULL,
+    language    TEXT    NOT NULL,
+    category    TEXT    NOT NULL,
+    usage_count INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(word, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_vocabulary_language
+    ON vocabulary(language);
 """
 
 
@@ -472,6 +503,23 @@ def init_db(db_path: str | Path | None = None) -> None:
                     CREATE INDEX IF NOT EXISTS idx_debt_transactions_debtor
                     ON debt_transactions(debtor_id);
                 """)
+                # Create vocabulary table if it doesn't exist
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS vocabulary (
+                        id SERIAL PRIMARY KEY,
+                        word TEXT NOT NULL,
+                        meaning TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        usage_count INTEGER NOT NULL DEFAULT 0,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        UNIQUE(word, language)
+                    );
+                """)
+                cur.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_vocabulary_language
+                    ON vocabulary(language);
+                """)
         else:
             # SQLite migration
             conn.executescript("""
@@ -499,6 +547,20 @@ def init_db(db_path: str | Path | None = None) -> None:
                 
                 CREATE INDEX IF NOT EXISTS idx_debt_transactions_debtor
                 ON debt_transactions(debtor_id);
+                
+                CREATE TABLE IF NOT EXISTS vocabulary (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    word TEXT NOT NULL,
+                    meaning TEXT NOT NULL,
+                    language TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    usage_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    UNIQUE(word, language)
+                );
+                
+                CREATE INDEX IF NOT EXISTS idx_vocabulary_language
+                ON vocabulary(language);
             """)
 
 
@@ -701,3 +763,88 @@ def log_llm_extraction(
                 (user_id, transcript, language, raw_llm_output, entries_json,
                  confidence, rule_based_parser_tried_first, rule_based_parser_failed)
             )
+
+
+def add_vocabulary(
+    word: str,
+    meaning: str,
+    language: str,
+    category: str,
+    *,
+    db_path: str | Path | None = None,
+) -> None:
+    """Add or update a vocabulary entry. If word exists, increment usage_count."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    
+    with get_connection(db_path) as conn:
+        if USE_POSTGRES:
+            with conn.cursor() as cur:
+                # Try to update existing entry
+                cur.execute(
+                    """
+                    INSERT INTO vocabulary (word, meaning, language, category, usage_count)
+                    VALUES (%s, %s, %s, %s, 1)
+                    ON CONFLICT (word, language) 
+                    DO UPDATE SET meaning = EXCLUDED.meaning, category = EXCLUDED.category,
+                                  usage_count = vocabulary.usage_count + 1;
+                    """,
+                    (word, meaning, language, category)
+                )
+        else:
+            # SQLite version
+            cur = conn.execute(
+                "SELECT id FROM vocabulary WHERE word = ? AND language = ?;",
+                (word, language)
+            )
+            existing = cur.fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE vocabulary SET meaning = ?, category = ?, usage_count = usage_count + 1 WHERE word = ? AND language = ?;",
+                    (meaning, category, word, language)
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO vocabulary (word, meaning, language, category, usage_count) VALUES (?, ?, ?, ?, 1);",
+                    (word, meaning, language, category)
+                )
+
+
+def get_vocabulary_by_language(
+    language: str,
+    *,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    """Get all vocabulary entries for a specific language."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    
+    if USE_POSTGRES:
+        sql = "SELECT * FROM vocabulary WHERE language = %s ORDER BY usage_count DESC;"
+        params = (language,)
+    else:
+        sql = "SELECT * FROM vocabulary WHERE language = ? ORDER BY usage_count DESC;"
+        params = (language,)
+    
+    return query_rows(db_path, sql, params)
+
+
+def get_vocabulary_meaning(
+    word: str,
+    language: str,
+    *,
+    db_path: str | Path | None = None,
+) -> Optional[str]:
+    """Get the meaning of a word in a specific language."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    
+    if USE_POSTGRES:
+        sql = "SELECT meaning FROM vocabulary WHERE word = %s AND language = %s LIMIT 1;"
+        params = (word, language)
+    else:
+        sql = "SELECT meaning FROM vocabulary WHERE word = ? AND language = ? LIMIT 1;"
+        params = (word, language)
+    
+    row = query_one(db_path, sql, params)
+    return row["meaning"] if row else None

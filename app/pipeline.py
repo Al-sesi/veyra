@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.asr import language_notice, transcribe
-from app.db import DEFAULT_DB_PATH, log_llm_extraction
+from app.db import DEFAULT_DB_PATH, log_llm_extraction, get_vocabulary_by_language
 from app.llm_parser import extract_entries_llm_safe
 
 logger = logging.getLogger("veyra.pipeline")
@@ -832,10 +832,20 @@ def process_voice_note(
     parsed = None
     failed_entries = []  # Track failed entries with reasons
     
+    # Load learned vocabulary for this language
+    vocabulary = None
+    try:
+        vocabulary = get_vocabulary_by_language(language, db_path=db_path)
+        if vocabulary:
+            logger.info(f"Loaded {len(vocabulary)} vocabulary entries for language {language}")
+    except Exception as vocab_error:
+        logger.warning(f"Failed to load vocabulary: {vocab_error}")
+        vocabulary = None
+    
     # Try LLM first (better natural language understanding)
     try:
         logger.info(f"Attempting LLM extraction for transcript: {transcript[:100]}...")
-        llm_entries, raw_llm_output = extract_entries_llm_safe(transcript, language)
+        llm_entries, raw_llm_output = extract_entries_llm_safe(transcript, language, vocabulary)
         
         # Log the LLM extraction attempt
         overall_confidence = "low" if any(e.get("confidence") == "low" for e in llm_entries) else "high"
@@ -890,8 +900,16 @@ def process_voice_note(
         parsed = parse_transcript(transcript)
     
     if not parsed:
-        # Use clarification prompt instead of generic unclear message
+        # Both LLM and rule-based parser failed - ask user what it means
+        # This allows the system to learn from user explanations
+        from app.db import get_vocabulary_meaning
+        
+        # Check if we already know some words from this transcript
         clarification = _generate_clarification(transcript, language)
+        
+        # Add a note about learning
+        clarification += "\n\n(If you tell me what this means, I'll remember it for next time)"
+        
         return _response(transcript, user_id, db_path, clarification, saved=False, language_notice_text=notice_text, detected_language=language)
 
     saved_entries = add_entries(

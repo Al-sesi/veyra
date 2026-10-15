@@ -45,6 +45,11 @@ const bookOverlay = document.getElementById("bookOverlay");
 const downloadExcelBtn = document.getElementById("downloadExcelBtn");
 const downloadCsvBtn = document.getElementById("downloadCsvBtn");
 const languageSelect = document.getElementById("languageSelect");
+const teachVocabBtn = document.getElementById("teachVocabBtn");
+const vocabModal = document.getElementById("vocabModal");
+const closeVocabModal = document.getElementById("closeVocabModal");
+const vocabForm = document.getElementById("vocabForm");
+const vocabList = document.getElementById("vocabList");
 
 let currentLang = "en"; // Default to English
 let recorder = null; // {stream, ctx, source, processor, chunks}
@@ -606,3 +611,109 @@ async function checkModelStatus() {
     });
   }
 })();
+
+// ---------------------------------------------------------------------------
+// Vocabulary Teaching Modal
+// ---------------------------------------------------------------------------
+
+teachVocabBtn.addEventListener("click", () => {
+  vocabModal.hidden = false;
+  loadVocabularyList();
+});
+
+closeVocabModal.addEventListener("click", () => {
+  vocabModal.hidden = true;
+});
+
+vocabModal.addEventListener("click", (e) => {
+  if (e.target === vocabModal) {
+    vocabModal.hidden = true;
+  }
+});
+
+vocabForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  
+  const language = document.getElementById("vocabLanguage").value;
+  const word = document.getElementById("vocabWord").value.trim();
+  const meaning = document.getElementById("vocabMeaning").value.trim();
+  const category = document.getElementById("vocabCategory").value;
+  
+  if (!word || !meaning) {
+    alert("Please fill in all fields");
+    return;
+  }
+  
+  try {
+    const form = new FormData();
+    form.append("word", word);
+    form.append("meaning", meaning);
+    form.append("language", language);
+    form.append("category", category);
+    
+    const res = await fetch(`${API_BASE}/vocabulary`, { method: "POST", body: form });
+    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.detail || `HTTP ${res.status}`);
+    }
+    
+    // Clear form
+    document.getElementById("vocabWord").value = "";
+    document.getElementById("vocabMeaning").value = "";
+    
+    // Refresh vocabulary list
+    await loadVocabularyList();
+    
+    // Show success message
+    addBubble("veyra", (b) => {
+      addText(b, `I learned "${word}" in ${language}! Thanks for teaching me.`);
+    });
+    
+  } catch (err) {
+    console.error("Vocabulary teaching error:", err);
+    alert(`Failed to teach vocabulary: ${err.message}`);
+  }
+});
+
+async function loadVocabularyList() {
+  const language = document.getElementById("vocabLanguage").value;
+  
+  try {
+    const res = await fetch(`${API_BASE}/vocabulary/${language}`);
+    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.detail || `HTTP ${res.status}`);
+    }
+    
+    vocabList.innerHTML = "";
+    
+    if (!data.vocabulary || data.vocabulary.length === 0) {
+      vocabList.innerHTML = '<div class="vocab-empty">No vocabulary learned yet for this language</div>';
+      return;
+    }
+    
+    for (const vocab of data.vocabulary) {
+      const item = document.createElement("div");
+      item.className = "vocab-item";
+      item.innerHTML = `
+        <div class="vocab-item-word">${vocab.word}</div>
+        <div class="vocab-item-meaning">${vocab.meaning}</div>
+        <div class="vocab-item-meta">
+          <span>${vocab.category}</span>
+          <span>•</span>
+          <span>used ${vocab.usage_count} times</span>
+        </div>
+      `;
+      vocabList.appendChild(item);
+    }
+    
+  } catch (err) {
+    console.error("Failed to load vocabulary:", err);
+    vocabList.innerHTML = '<div class="vocab-empty">Failed to load vocabulary</div>';
+  }
+}
+
+// Load vocabulary when language selection changes
+document.getElementById("vocabLanguage").addEventListener("change", loadVocabularyList);

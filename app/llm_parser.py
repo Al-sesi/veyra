@@ -67,13 +67,16 @@ STRICT RULES:
 10. If you cannot extract a valid entry, return a single entry with type "unclear" and confidence "low".
 
 CRITICAL - MULTIPLE TRANSACTIONS:
-11. When the transcript contains MULTIPLE transactions (separated by commas, "and", "then", or periods), extract ALL of them as separate entries in the array.
+11. When the transcript contains MULTIPLE transactions (separated by commas, "and", "then", periods, OR sequential item-amount patterns), extract ALL of them as separate entries in the array.
 12. Examples of multiple transactions:
     - "I bought rice 4,000, I bought beans 5,000, I bought Indomie 7,000" -> 3 expense entries
     - "I sold rice 5k and beans 3k" -> 2 sale entries
     - "I buy rice 4k, I buy beans 5k" -> 2 expense entries
     - "I bought rice 4,000. I bought beans 5,000." -> 2 expense entries
-13. Do NOT stop after the first transaction - extract EVERY transaction mentioned in the transcript.
+    - "i sell rice 100k beans 20k indomine 200k" -> 3 sale entries (rice: 100k, beans: 20k, indomine: 200k)
+    - "i buy rice 50k beans 10k" -> 2 expense entries (rice: 50k, beans: 10k)
+13. For sequential patterns (item1 amount1 item2 amount2), pair each item with the amount that follows it. The transaction verb at the start applies to ALL items.
+14. Do NOT stop after the first transaction - extract EVERY transaction mentioned in the transcript.
 
 NATURAL LANGUAGE UNDERSTANDING:
 - Understand the SEMANTIC MEANING, not just exact keywords
@@ -185,6 +188,12 @@ Output: [{"item": "rice", "quantity": null, "amount": 4000, "type": "expense", "
 
 Input: "I bought rice 4,000. I bought beans 5,000."
 Output: [{"item": "rice", "quantity": null, "amount": 4000, "type": "expense", "confidence": "high"}, {"item": "beans", "quantity": null, "amount": 5000, "type": "expense", "confidence": "high"}]
+
+Input: "i sell rice 100k beans 20k indomine 200k"
+Output: [{"item": "rice", "quantity": null, "amount": 100000, "type": "sale", "confidence": "high"}, {"item": "beans", "quantity": null, "amount": 20000, "type": "sale", "confidence": "high"}, {"item": "indomine", "quantity": null, "amount": 200000, "type": "sale", "confidence": "high"}]
+
+Input: "i buy rice 50k beans 10k"
+Output: [{"item": "rice", "quantity": null, "amount": 50000, "type": "expense", "confidence": "high"}, {"item": "beans", "quantity": null, "amount": 10000, "type": "expense", "confidence": "high"}]
 
 Input: "Mama Ngozi owes me 5k"
 Output: [{"item": "Mama Ngozi", "quantity": null, "amount": 5000, "type": "debt_owed_to_me", "confidence": "high"}]

@@ -859,13 +859,13 @@ def split_transactions(text: str) -> List[str]:
         
         # If we have multiple numeric phrases and a single verb at the start,
         # this is likely a sequential item-amount list
-        if len(numerics) >= 2 and tx_verb and verb_index >= 0:
+        # Also handle case without explicit verb (e.g., "rice 100k beans 20k")
+        if len(numerics) >= 2:
             # Extract items between amounts
             segments_from_sequence = []
             
-            # Build segments: [verb + item1 + amount1], [item2 + amount2], [item3 + amount3]
-            # OR: [verb] applies to all, so just: [item1 + amount1], [item2 + amount2], [item3 + amount3]
-            # We'll include the verb only in the first segment
+            # Build segments: [verb + item1 + amount1], [verb + item2 + amount2], [verb + item3 + amount3]
+            # The verb applies to ALL items in the sequence
             
             sorted_numerics = sorted(numerics, key=lambda x: x["start"])
             
@@ -875,17 +875,36 @@ def split_transactions(text: str) -> List[str]:
                 item_end = num["start"]
                 item_text = part[item_start:item_end].strip()
                 
-                # Remove the verb from the first item if present
-                if i == 0 and tx_verb:
-                    item_text = item_text.replace(tx_verb, "", 1).strip()
+                # Remove the verb and pronouns from the first item if present
+                if i == 0:
+                    # Remove pronouns first
+                    for pronoun in ["i", "me", "my", "we", "don", "am"]:
+                        if item_text.lower().startswith(pronoun + " "):
+                            item_text = item_text[len(pronoun):].strip()
+                    # Then remove the verb
+                    if tx_verb and item_text.lower().startswith(tx_verb.lower() + " "):
+                        item_text = item_text[len(tx_verb):].strip()
+                    elif tx_verb and item_text.lower() == tx_verb.lower():
+                        item_text = ""
                 
-                # Build the segment
-                if i == 0 and tx_verb:
+                # Build the segment - include verb in ALL segments so transaction type can be detected
+                if tx_verb:
                     segment_text = f"{tx_verb} {item_text} {num['text']}".strip()
                 else:
-                    segment_text = f"{item_text} {num['text']}".strip()
+                    # No verb found - try to infer from the original segment's transaction type
+                    # If the original segment has a transaction type, use it for all segments
+                    original_tx_type = detect_transaction_type(part)
+                    if original_tx_type:
+                        # Add the appropriate verb to enable detection
+                        verb_to_add = "sell" if original_tx_type == "sale" else "buy"
+                        segment_text = f"{verb_to_add} {item_text} {num['text']}".strip()
+                    else:
+                        # Can't determine transaction type, keep as is (will be filtered out later)
+                        segment_text = f"{item_text} {num['text']}".strip()
                 
-                segments_from_sequence.append(segment_text)
+                # Only add if we have meaningful content (not just empty or whitespace)
+                if segment_text and len(segment_text.split()) >= 2:  # At least item + amount
+                    segments_from_sequence.append(segment_text)
             
             if segments_from_sequence:
                 final_parts.extend(segments_from_sequence)

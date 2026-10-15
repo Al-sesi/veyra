@@ -726,6 +726,15 @@ def process_voice_note(
 
             reply = f"RECORDED 👍\n" + "\n".join(debt_entries)
         
+        # Add type field to debt entries for frontend display
+        for debt in debts_added:
+            if direction == "owed_to_me":
+                debt['type'] = 'debt_owed_to_me'
+            else:
+                debt['type'] = 'debt_i_owe'
+            # Ensure item field is set to person name for consistency
+            debt['item'] = debt.get('person', 'Unknown')
+        
         return _response(transcript, debts_added[0]["user_id"], db_path, reply, debts_added, saved=True, language_notice_text=notice_text, detected_language=language)
 
     if intent == "debt_paid":

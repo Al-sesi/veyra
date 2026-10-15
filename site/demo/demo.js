@@ -109,9 +109,25 @@ function addEntryChips(bubble, entries) {
     const li = el("li");
     const qty = e.quantity ? `${e.quantity} × ` : "";
     const item = e.item || "Transaction";
-    const type = e.type || "unknown";
     const amount = e.amount !== null && e.amount !== undefined ? e.amount : 0;
-    li.appendChild(el("span", null, `${qty}${item} (${type})`));
+    
+    // Map entry types to user-friendly labels
+    let typeLabel = "";
+    if (e.type === "sale") {
+      typeLabel = "sale";
+    } else if (e.type === "expense") {
+      typeLabel = "expense";
+    } else if (e.type === "debt_owed_to_me") {
+      typeLabel = "owes you";
+    } else if (e.type === "debt_i_owe") {
+      typeLabel = "you owe";
+    } else if (e.type === "debt_paid") {
+      typeLabel = "debt paid";
+    }
+    
+    // Only show type label if it's meaningful (not for sale which is the default)
+    const displayText = typeLabel ? `${qty}${item} (${typeLabel})` : `${qty}${item}`;
+    li.appendChild(el("span", null, displayText));
     li.appendChild(el("strong", null, fmtNaira(amount)));
     ul.appendChild(li);
   }

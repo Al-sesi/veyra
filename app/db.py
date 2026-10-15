@@ -780,17 +780,24 @@ def add_vocabulary(
     with get_connection(db_path) as conn:
         if USE_POSTGRES:
             with conn.cursor() as cur:
-                # Try to update existing entry
+                # Check if entry exists
                 cur.execute(
-                    """
-                    INSERT INTO vocabulary (word, meaning, language, category, usage_count)
-                    VALUES (%s, %s, %s, %s, 1)
-                    ON CONFLICT (word, language) 
-                    DO UPDATE SET meaning = EXCLUDED.meaning, category = EXCLUDED.category,
-                                  usage_count = vocabulary.usage_count + 1;
-                    """,
-                    (word, meaning, language, category)
+                    "SELECT id FROM vocabulary WHERE word = %s AND language = %s;",
+                    (word, language)
                 )
+                existing = cur.fetchone()
+                if existing:
+                    # Update existing entry
+                    cur.execute(
+                        "UPDATE vocabulary SET meaning = %s, category = %s, usage_count = usage_count + 1 WHERE word = %s AND language = %s;",
+                        (meaning, category, word, language)
+                    )
+                else:
+                    # Insert new entry
+                    cur.execute(
+                        "INSERT INTO vocabulary (word, meaning, language, category, usage_count) VALUES (%s, %s, %s, %s, 1);",
+                        (word, meaning, language, category)
+                    )
         else:
             # SQLite version
             cur = conn.execute(

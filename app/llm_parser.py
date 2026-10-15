@@ -278,23 +278,23 @@ def warmup_llm() -> dict:
     """
     Warmup the LLM by making a simple test call during startup.
     This ensures the first user message doesn't have the cold start delay.
-    
+
     Returns a dict with warmup status.
     """
     try:
         logger.info("Warming up LLM connection...")
         start_time = time.time()
-        
+
         # Make a simple test call with a known input
         test_transcript = "I sold rice for 5000 naira"
         test_language = "en"
-        
-        entries, raw_output = extract_entries_llm(test_transcript, test_language)
-        
+
+        entries, raw_output = extract_entries_llm(test_transcript, test_language, vocabulary=None)
+
         elapsed = time.time() - start_time
-        
+
         logger.info(f"LLM warmup completed in {elapsed:.2f}s")
-        
+
         return {
             "status": "success",
             "warmup_time_seconds": elapsed,

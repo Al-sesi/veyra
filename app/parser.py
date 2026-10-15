@@ -792,6 +792,7 @@ def split_transactions(text: str) -> List[str]:
       - commas that are NOT between digits (i.e. NOT thousand separators like 45,000)
       - semicolons
       - connector words: " and ", " then "
+      - sequential item-amount patterns: "item1 amount1 item2 amount2"
 
     Examples:
       "45,000 naira, transport 2,000"  -> ["45,000 naira", "transport 2,000"]
@@ -799,6 +800,7 @@ def split_transactions(text: str) -> List[str]:
       "I bought chin chin, 2k" -> ["I bought chin chin, 2k"] (kept together - natural language)
       "I went to the market. I bought rice for 20,000 and later bought chin chin for 2,000."
         -> ["I bought rice for 20,000", "later bought chin chin for 2,000"]
+      "i sell rice 100k beans 20k indomine 200k" -> ["i sell rice 100k", "beans 20k", "indomine 200k"]
     """
     # First, split on periods to separate sentences
     # This handles conversational narratives where periods separate distinct transactions
@@ -834,6 +836,60 @@ def split_transactions(text: str) -> List[str]:
         part = part.strip()
         if not part:
             continue
+        
+        # NEW: Detect sequential item-amount patterns without separators
+        # Pattern: "item1 amount1 item2 amount2 item3 amount3"
+        # e.g., "i sell rice 100k beans 20k indomine 200k"
+        # First, extract the transaction verb at the start (if any)
+        words = part.split()
+        tx_verb = None
+        verb_index = -1
+        
+        for i, w in enumerate(words):
+            lower_w = w.lower().strip(".,!?;:")
+            if lower_w in ["i", "me", "my", "we", "don", "am"]:
+                continue
+            if any(v in lower_w for v in ["sell", "sold", "buy", "bought", "purchase", "paid", "pay", "spent", "spend"]):
+                tx_verb = w
+                verb_index = i
+                break
+        
+        # Find all numeric phrases in the segment
+        numerics = find_numeric_phrases(part)
+        
+        # If we have multiple numeric phrases and a single verb at the start,
+        # this is likely a sequential item-amount list
+        if len(numerics) >= 2 and tx_verb and verb_index >= 0:
+            # Extract items between amounts
+            segments_from_sequence = []
+            
+            # Build segments: [verb + item1 + amount1], [item2 + amount2], [item3 + amount3]
+            # OR: [verb] applies to all, so just: [item1 + amount1], [item2 + amount2], [item3 + amount3]
+            # We'll include the verb only in the first segment
+            
+            sorted_numerics = sorted(numerics, key=lambda x: x["start"])
+            
+            for i, num in enumerate(sorted_numerics):
+                # Get text before this numeric (the item)
+                item_start = 0 if i == 0 else sorted_numerics[i-1]["end"]
+                item_end = num["start"]
+                item_text = part[item_start:item_end].strip()
+                
+                # Remove the verb from the first item if present
+                if i == 0 and tx_verb:
+                    item_text = item_text.replace(tx_verb, "", 1).strip()
+                
+                # Build the segment
+                if i == 0 and tx_verb:
+                    segment_text = f"{tx_verb} {item_text} {num['text']}".strip()
+                else:
+                    segment_text = f"{item_text} {num['text']}".strip()
+                
+                segments_from_sequence.append(segment_text)
+            
+            if segments_from_sequence:
+                final_parts.extend(segments_from_sequence)
+                continue  # Skip the rest of the processing for this part
         
         # Normalize connector words within this sentence
         # Use " , " as a separator for "and" to split transactions

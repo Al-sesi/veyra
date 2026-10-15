@@ -858,6 +858,36 @@ def test_partial_success_with_failure_notification(client, tmp_db: Path):
     body = resp.json()
     # Should have at least one successful entry (rice)
     assert len(body["entries"]) >= 1
+    # Should mention that transport wasn't recorded (no amount)
+    assert "not recorded" in body["reply_text"].lower() or "didn't quite catch" in body["reply_text"].lower()
+    # Should show the successful entry
+    assert "Rice" in body["reply_text"] or "₦45,000" in body["reply_text"]
+
+
+def test_sequential_item_amount_splitting(client, tmp_db: Path):
+    """Test that sequential item-amount patterns are split correctly.
+    Example: "i sell rice 100k beans 20k indomine 200k" should split into 3 entries.
+    """
+    resp = client.post(
+        "/text-message",
+        data={"text": "i sell rice 100k beans 20k indomine 200k", "language": "en", "user_id": "30"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # Should have 3 separate entries
+    assert len(body["entries"]) == 3
+    # Check the items and amounts
+    items = [e["item"] for e in body["entries"]]
+    amounts = [e["amount"] for e in body["entries"]]
+    assert "Rice" in items
+    assert "Beans" in items
+    assert "Indomine" in items
+    assert 100000 in amounts
+    assert 20000 in amounts
+    assert 200000 in amounts
+    # All should be sales
+    assert all(e["type"] == "sale" for e in body["entries"])
+    assert len(body["entries"]) >= 1
     # Should show the simplified success format for recorded entries
     if len(body["entries"]) > 0:
         assert "👍" in body["reply_text"]

@@ -631,6 +631,13 @@ vocabModal.addEventListener("click", (e) => {
   }
 });
 
+// Also close on Escape key
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !vocabModal.hidden) {
+    vocabModal.hidden = true;
+  }
+});
+
 vocabForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   

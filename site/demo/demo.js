@@ -108,7 +108,7 @@ function addEntryChips(bubble, entries) {
   for (const e of entries) {
     const li = el("li");
     const qty = e.quantity ? `${e.quantity} × ` : "";
-    const item = e.item || "Unknown item";
+    const item = e.item || "Transaction";
     const type = e.type || "unknown";
     const amount = e.amount !== null && e.amount !== undefined ? e.amount : 0;
     li.appendChild(el("span", null, `${qty}${item} (${type})`));

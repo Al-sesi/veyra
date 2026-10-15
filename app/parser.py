@@ -725,6 +725,7 @@ def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], t
 
     result = " ".join(w for w in filtered if w).strip()
 
+    # Special handling for expense items
     if not result and tx_type == "expense":
         lowered = segment.lower()
         for item in EXPENSE_ITEMS:
@@ -734,10 +735,42 @@ def extract_item(segment: str, amount_text: str, quantity_text: Optional[str], t
             return "Levy"
         if "stock" in lowered:
             return "Stock"
+        if "fee" in lowered:
+            return "Fee"
+        if "charge" in lowered:
+            return "Charge"
+        if "bill" in lowered:
+            return "Bill"
+
+    # If we still have no result, try to extract any meaningful word
+    # This handles cases like "Majeed - N10,000" where the person's name is the item
+    if not result:
+        # Try to get the first meaningful word (not a number, not a stopword)
+        words = segment.split()
+        for w in words:
+            clean = w.strip(".,!?;:-").lower()
+            if clean and not _is_numeric_token(clean) and strip_diacritics(clean) not in stopwords:
+                # Check if it's a single character (likely a connector)
+                if len(clean) > 1:
+                    return w.strip(".,!?;:-").capitalize()
 
     if result:
         return result[0].upper() + result[1:]
-    return "Item"
+    
+    # Last resort: if we have any text at all, use the first word
+    words = segment.split()
+    if words:
+        first_word = words[0].strip(".,!?;:-")
+        if first_word and not _is_numeric_token(first_word.lower()):
+            return first_word.capitalize()
+    
+    # Context-aware fallback based on transaction type
+    if tx_type == "expense":
+        return "Expense"
+    elif tx_type == "sale":
+        return "Sale"
+    else:
+        return "Transaction"
 
 
 def find_quantity_text(segment: str, amount: Dict[str, Any], numerics: List[Dict[str, Any]]) -> Optional[str]:
